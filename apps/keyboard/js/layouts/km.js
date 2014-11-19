@@ -3,7 +3,7 @@
   imEngine: 'latin',
   types: ['text', 'url', 'email'],
   autoCorrectLanguage: '',
-  menuLabel: '\u1781\u17D2\u798\u17C2\u179A' /*ខ្មែរ*/,
+  menuLabel: '\u1781\u17D2\u1798\u17C2\u179A' /*ខ្មែរ*/,
   alt: {
     '\u178A'/*ដ*/: '\u17E1\u17A7'/*១ឧ*/,
     '\u1793'/*ន*/: '\u17E2\17AA'/*២ឪ*/,
