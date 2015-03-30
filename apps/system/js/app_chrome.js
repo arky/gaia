@@ -1,4 +1,5 @@
 /* global BookmarksDatabase */
+/* global eventSafety */
 /* global IconsHelper */
 /* global LazyLoader */
 /* global ModalDialog */
@@ -10,7 +11,6 @@
 
 (function(exports) {
   var _id = 0;
-  var _ = navigator.mozL10n.get;
 
   var newTabManifestURL = null;
   SettingsListener.observe('rocketbar.newTabAppURL', '',
@@ -66,6 +66,10 @@
 
   AppChrome.prototype._DEBUG = false;
 
+  AppChrome.prototype.LOCK_ICON_WIDTH = 30;
+  AppChrome.prototype.CLOSE_BUTTON_WIDTH = 50;
+  AppChrome.prototype.PRIVATE_ICON_WIDTH = 35;
+
   AppChrome.prototype.reConfig = function() {
     var chrome = this.app.config.chrome;
     if (!chrome) {
@@ -111,9 +115,12 @@
     return `<div class="chrome" id="${className}">
               <gaia-progress></gaia-progress>
               <div class="controls">
-                <button type="button" class="back-button" disabled></button>
-                <button type="button" class="forward-button" disabled></button>
+                <button type="button" class="back-button"
+                        data-l10n-id="back-button" disabled></button>
+                <button type="button" class="forward-button"
+                        data-l10n-id="forward-button" disabled></button>
                 <div class="urlbar">
+                  <span class="pb-icon"></span>
                   <div class="title" data-ssl=""></div>
                   <button type="button" class="reload-button"
                           data-l10n-id="reload-button" disabled></button>
@@ -121,7 +128,8 @@
                           data-l10n-id="stop-button"></button>
                 </div>
                 <button type="button" class="menu-button" alt="Menu"></button>
-                <button type="button" class="windows-button"></button>
+                <button type="button" class="windows-button"
+                        data-l10n-id="windows-button"></button>
               </div>
             </div>`;
   };
@@ -225,6 +233,10 @@
         this.handleLoadEnd(evt);
         break;
 
+      case 'mozbrowsererror':
+        this.handleError(evt);
+        break;
+
       case 'mozbrowserlocationchange':
         this.handleLocationChanged(evt);
         break;
@@ -233,7 +245,7 @@
         this.handleScrollAreaChanged(evt);
         break;
 
-      case 'mozbrowsersecuritychange':
+      case '_securitychange':
         this.handleSecurityChanged(evt);
         break;
 
@@ -247,6 +259,11 @@
 
       case '_namechanged':
         this.handleNameChanged(evt);
+        break;
+
+      case 'localized':
+        // may need to re-layout header if document direction has changed
+        this._updateHeaderBarLayout();
         break;
     }
   };
@@ -358,14 +375,16 @@
 
     this.app.element.addEventListener('mozbrowserloadstart', this);
     this.app.element.addEventListener('mozbrowserloadend', this);
+    this.app.element.addEventListener('mozbrowsererror', this);
     this.app.element.addEventListener('mozbrowserlocationchange', this);
     this.app.element.addEventListener('mozbrowsertitlechange', this);
     this.app.element.addEventListener('mozbrowsermetachange', this);
     this.app.element.addEventListener('mozbrowserscrollareachanged', this);
-    this.app.element.addEventListener('mozbrowsersecuritychange', this);
+    this.app.element.addEventListener('_securitychange', this);
     this.app.element.addEventListener('_loading', this);
     this.app.element.addEventListener('_loaded', this);
     this.app.element.addEventListener('_namechanged', this);
+    window.addEventListener('localized', this);
 
     var element = this.element;
 
@@ -413,12 +432,14 @@
 
     this.app.element.removeEventListener('mozbrowserloadstart', this);
     this.app.element.removeEventListener('mozbrowserloadend', this);
+    this.app.element.removeEventListener('mozbrowsererror', this);
     this.app.element.removeEventListener('mozbrowserlocationchange', this);
     this.app.element.removeEventListener('mozbrowsertitlechange', this);
     this.app.element.removeEventListener('mozbrowsermetachange', this);
     this.app.element.removeEventListener('_loading', this);
     this.app.element.removeEventListener('_loaded', this);
     this.app.element.removeEventListener('_namechanged', this);
+    window.removeEventListener('localized', this);
     this.app = null;
   };
 
@@ -462,8 +483,38 @@
   };
 
   AppChrome.prototype.handleSecurityChanged = function(evt) {
-    this.title.dataset.ssl = evt.detail.state;
+    this.title.dataset.ssl = this.app.getSSLState();
+    // we may need to show or hide the lock icon
+    this._updateHeaderBarLayout();
   };
+
+  AppChrome.prototype._updateHeaderBarLayout = function() {
+    if (this.useCombinedChrome()) {
+      return;
+    }
+    // we need to create space for the lock icon at the correct edge
+    // NOTE: gaia-header doesn't handle RTL - see bug 1140668
+    // when it does, we'll need to revisit/remove this
+    var sslState = this.app.getSSLState();
+    var isRTL = (document.documentElement.dir === 'rtl');
+    var showLockIcon = (sslState == 'secure' || sslState == 'broken');
+    var beforeIndent = 0;
+
+    if (this.app.isPrivateBrowser()) {
+      beforeIndent += this.PRIVATE_ICON_WIDTH;
+    }
+    if (showLockIcon) {
+      beforeIndent += this.LOCK_ICON_WIDTH;
+    }
+    if (isRTL) {
+      // close button is currently on left in gaia-header in LTR & RTL
+      this.header.titleStart = this.CLOSE_BUTTON_WIDTH;
+      this.header.titleEnd = beforeIndent;
+    } else {
+      this.header.titleEnd = 0;
+      this.header.titleStart = this.CLOSE_BUTTON_WIDTH + beforeIndent;
+    }
+  },
 
   AppChrome.prototype.handleTitleChanged = function(evt) {
     if (this._gotName || this._fixedTitle) {
@@ -493,6 +544,20 @@
     };
 
   AppChrome.prototype.setThemeColor = function ac_setThemColor(color) {
+    // Do not set theme color for private windows
+    if (this.app.isPrivateBrowser()) {
+      return;
+    }
+
+    var bottomApp = this.app.getBottomMostWindow();
+
+    if (this.app.CLASS_NAME === 'PopupWindow' &&
+      bottomApp &&
+      bottomApp.themeColor) {
+      color = bottomApp.themeColor;
+    }
+
+    this.app.themeColor = color;
     this.element.style.backgroundColor = color;
 
     if (!this.app.isHomescreen) {
@@ -506,14 +571,24 @@
     }
 
     var self = this;
-    var previousColor;
+    var finishedFade = false;
+    var endBackgroundFade = function(evt) {
+      if (evt && evt.propertyName != 'background-color') {
+        return;
+      }
+      finishedFade = true;
+      if (self.element) {
+        self.element.removeEventListener('transitionend', endBackgroundFade);
+      }
+    };
+    eventSafety(this.element, 'transitionend', endBackgroundFade, 1000);
 
     window.requestAnimationFrame(function updateAppColor() {
-      var computedColor = window.getComputedStyle(self.element).backgroundColor;
-      if (previousColor === computedColor) {
+      if (finishedFade || !self.element) {
         return;
       }
 
+      var computedColor = window.getComputedStyle(self.element).backgroundColor;
       var colorCodes = /rgb\((\d+), (\d+), (\d+)\)/.exec(computedColor);
       if (!colorCodes || colorCodes.length === 0) {
         return;
@@ -525,9 +600,12 @@
       var brightness =
         Math.sqrt((r*r) * 0.241 + (g*g) * 0.691 + (b*b) * 0.068);
 
-      self.app.element.classList.toggle('light', brightness > 200);
-      self.app.publish('titlestatechanged');
-      previousColor = computedColor;
+      var wasLight = self.app.element.classList.contains('light');
+      var isLight  = brightness > 200;
+      if (wasLight != isLight) {
+        self.app.element.classList.toggle('light', isLight);
+        self.app.publish('titlestatechanged');
+      }
       window.requestAnimationFrame(updateAppColor);
     });
   };
@@ -650,6 +728,17 @@
     this.containerElement.classList.remove('loading');
   };
 
+  AppChrome.prototype.handleError = function ac_handleError(evt) {
+    if (evt.detail && evt.detail.type === 'fatal') {
+      return;
+    }
+    if (this.useCombinedChrome() && this.app.config.chrome.scrollable) {
+      // When we get an error, keep the rocketbar maximized.
+      this.element.classList.add('maximized');
+      this.containerElement.classList.remove('scrollable');
+    }
+  };
+
   AppChrome.prototype.maximize = function ac_maximize(callback) {
     var element = this.element;
     element.classList.add('maximized');
@@ -659,18 +748,13 @@
       return;
     }
 
-    var safetyTimeout = null;
     var finish = function(evt) {
       if (evt && evt.target !== element) {
         return;
       }
-
-      element.removeEventListener('transitionend', finish);
-      clearTimeout(safetyTimeout);
       callback();
     };
-    element.addEventListener('transitionend', finish);
-    safetyTimeout = setTimeout(finish, 250);
+    eventSafety(element, 'transitionend', finish, 250);
   };
 
   AppChrome.prototype.collapse = function ac_collapse() {
@@ -739,19 +823,27 @@
       }
     }
 
-    var data = {
-      title: _('add-to-home-screen'),
-      options: []
-    };
+    var title = 'add-to-home-screen';
+    var options = [];
 
     if (this.isSearch()) {
       var dataset = this.app.config;
-      data.options.push({ id: 'search', text: dataset.searchName });
+      options.push({
+        id: 'search',
+        text: {
+          raw: dataset.searchName
+        }
+      });
     } else {
-      data.options.push({ id: 'origin', text: this.title.textContent });
+      options.push({
+        id: 'origin',
+        text: {
+          raw: this.title.textContent
+        }
+      });
     }
 
-    ModalDialog.selectOne(data, selected);
+    ModalDialog.selectOne(title, options, selected);
   };
 
   AppChrome.prototype.showWindows = function ac_showWindows() {

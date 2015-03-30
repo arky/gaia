@@ -478,6 +478,22 @@ contacts.Form = (function() {
     }
   }
 
+  /**
+   * We cannot relay on the counter, but in the next id after the
+   * last field.
+   * See bug 1113134 for related explanation.
+   */
+  function getNextTemplateId(container) {
+    var nodes = container.childNodes;
+    if (!nodes || nodes.length === 0) {
+      return 0;
+    }
+
+    var lastNode = nodes[nodes.length - 1];
+    var value = lastNode.dataset.index;
+    return value ? parseInt(value) + 1 : 0;
+  }
+
   var insertField = function insertField(type, object, targetClasses) {
     if (!type || !configs[type]) {
       console.error('Inserting field with unknown type');
@@ -520,7 +536,7 @@ contacts.Form = (function() {
         infoFromFB = true;
       }
     });
-    currField.i = counters[type];
+    currField.i = getNextTemplateId(container);
 
     var rendered = utils.templates.render(template, currField);
     // Controlling that if no tel phone is present carrier field is disabled
@@ -695,11 +711,18 @@ contacts.Form = (function() {
       isIceContact(currentContact, function(result) {
         if (result === true) {
           var msgId = 'ICEContactDelTel';
-          var phoneNumberInput = document.getElementById('number_0');
-          var phoneNumberValue = phoneNumberInput &&
-                                                phoneNumberInput.value.trim();
+          var selector = 'div:not([data-template]) .textfield[type="tel"]';
+          var telInputs = document.querySelectorAll(selector);
+          var hasNumber = false;
 
-          if (counters.tel === 0 || (counters.tel === 1 && !phoneNumberValue)) {
+          for (var i = 0, len = telInputs.length; i < len; i++) {
+            if (telInputs[i].value.trim()) {
+              hasNumber = true;
+              break;
+            }
+          }
+
+          if (!hasNumber) {
             msgId = 'ICEContactDelTelAll';
             ICEData.removeICEContact(currentContact.id);
           }
@@ -1394,8 +1417,10 @@ contacts.Form = (function() {
                  function(resized) {
                    Contacts.updatePhoto(resized, thumb);
                    currentPhoto = resized;
-                   // We temporarily mark that there is a local photo chosen
-                   deviceContact.photo = [currentPhoto];
+                   if (fb.isFbContact(currentContact)) {
+                     // We temporarily mark that there is a local photo chosen
+                     deviceContact.photo = [currentPhoto];
+                   }
                  });
     };
 

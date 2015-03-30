@@ -6,6 +6,7 @@
 /* global ScreenLayout */
 /* global SettingsCache */
 /* global Service */
+/* global focusManager */
 'use strict';
 
 (function(exports) {
@@ -63,7 +64,7 @@
     }
 
     this.launchTime = Date.now();
-
+    focusManager.addUI(this);
     return this;
   };
 
@@ -421,6 +422,7 @@
         clearTimeout(fallbackTimeout);
         this.element.removeEventListener('_closed', onClosed);
         this.destroy();
+        this.publish('terminated');
       }.bind(this);
 
       this.element.addEventListener('_closed', onClosed);
@@ -435,13 +437,12 @@
       }
     } else {
       this.destroy();
+      /**
+       * Fired when the instance is terminated.
+       * @event AppWindow#appterminated
+       */
+      this.publish('terminated');
     }
-
-    /**
-     * Fired when the instance is terminated.
-     * @event AppWindow#appterminated
-     */
-    this.publish('terminated');
   };
 
   /**
@@ -482,6 +483,9 @@
 
     this.publish('willdestroy');
     this.uninstallSubComponents();
+
+    focusManager.removeUI(this);
+
     if (this.element) {
       if (this.element.parentNode) {
         this.element.parentNode.removeChild(this.element);
@@ -702,8 +706,8 @@
     'childWindowFactory': window.ChildWindowFactory,
   };
 
-  AppWindow.prototype.openAnimation = 'enlarge';
-  AppWindow.prototype.closeAnimation = 'reduce';
+  AppWindow.prototype.openAnimation = 'invoked';
+  AppWindow.prototype.closeAnimation = 'fade-out';
 
   /**
    * Install sub components belong to this window instance.
@@ -904,6 +908,13 @@
           !this.isHomescreen) {
         this.debug('setting background color..');
         this.browser.element.style.backgroundColor = backgroundColor;
+      }
+      /**
+       * If the window is active, we should focus it when it loaded. We didn't
+       * focus it when this window was opened and defered to here.
+      **/
+      if (this.getBottomMostWindow().isActive() && this.isActive()) {
+        focusManager.focus();
       }
     };
 
@@ -1660,18 +1671,17 @@
    * @param  {String} url URL.
    */
   AppWindow.prototype.modifyURLatBackground = function aw_changeURL(url) {
-    // If the app is in foreground, it's too risky to change it's
-    // URL. We'll ignore this request.
-    if (!this.isActive()) {
-      var iframe = this.browser.element;
-      // If the app is opened and it is loaded to the correct page,
-      // then th=ere is nothing to do.
-      if (iframe.src !== url) {
-        // Rewrite the URL of the app frame to the requested URL.
-        // XXX: We could ended opening URls not for the app frame
-        // in the app frame. But we don't care.
-        iframe.src = url;
-      }
+    // XXX: If the app is in foreground, it's too risky to change it's
+    // URL. We still change it because the home app is an overlay on top of any
+    // app.
+    var iframe = this.browser.element;
+    // If the app is opened and it is loaded to the correct page,
+    // then there is nothing to do.
+    if (iframe.src !== url) {
+      // Rewrite the URL of the app frame to the requested URL.
+      // XXX: We could ended opening URLs not for the app frame
+      // in the app frame. But we don't care.
+      iframe.src = url;
     }
   };
 
@@ -2000,11 +2010,7 @@
   };
 
   AppWindow.prototype._handle__focus = function() {
-    var win = this;
-    while (win.frontWindow && win.frontWindow.isActive()) {
-      win = win.frontWindow;
-    }
-    win.focus();
+    focusManager.focus();
   };
 
   /**
@@ -2079,5 +2085,14 @@
 
     this.setVisible(false);
   };
+
+  AppWindow.prototype.getElement = function() {
+    return this.element;
+  };
+
+  AppWindow.prototype.isFocusable = function() {
+    return this.loaded && this.isVisible();
+  };
+
   exports.AppWindow = AppWindow;
 }(window));

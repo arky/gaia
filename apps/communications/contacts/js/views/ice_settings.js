@@ -2,7 +2,6 @@
 /* global ICEData */
 /* global ConfirmDialog */
 
-
 /**
  * ICE Settings view. In charge of selecting
  * the contacts for emergency and keeping sync
@@ -170,11 +169,11 @@ contacts.ICE = (function() {
     iceContactCheckboxes[index].checked = active;
     iceContactButtons[index].disabled = !active;
 
-    var span = document.createElement('span');
-    span.classList.add('ice-contact');
-    span.textContent = label;
+    var bdi = document.createElement('bdi');
+    bdi.classList.add('ice-contact');
+    bdi.textContent = label;
     iceContactButtons[index].innerHTML = '';
-    iceContactButtons[index].appendChild(span);
+    iceContactButtons[index].appendChild(bdi);
     iceContactButtons[index].dataset.contactId = contactId;
   }
 
@@ -188,7 +187,7 @@ contacts.ICE = (function() {
   }
 
   function resetIceGroupStates() {
-    for(var j = 0; j < iceContactCheckboxes.lenght; j++) {
+    for(var j = 0; j < iceContactCheckboxes.length; j++) {
       resetIceGroupState(j);
     }
   }

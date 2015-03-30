@@ -31,7 +31,7 @@ function generateServicesConfig(options) {
   // Just copy over the default file
   if (!path) {
     var sourcePath = utils.joinPath(options.APP_DIR, 'js', 'services.js');
-    utils.copyFileTo(sourcePath, stageJsPath, 'services.js', true);
+    utils.copyFileTo(sourcePath, stageJsPath, 'services.js');
     return;
   }
 
@@ -65,12 +65,12 @@ function getDigest(contents) {
 function writeCacheValue(options) {
   // Update the cache value based on digest values of all files.
   var finalDigest = getDigest(digests.join(',')),
-      cacheRegExp = /HTML_COOKIE_CACHE_VERSION\s*=\s*["'][^"']+["']/,
+      cacheRegExp = /HTML_CACHE_VERSION\s*=\s*["'][^"']+["']/,
       cacheFile = utils.getFile(options.STAGE_APP_DIR, 'js',
         'html_cache_restore.js'),
       contents = utils.getFileContent(cacheFile);
   contents = contents.replace(cacheRegExp,
-    'HTML_COOKIE_CACHE_VERSION = \'' + finalDigest + '\'');
+    'HTML_CACHE_VERSION = \'' + finalDigest + '\'');
 
   utils.writeContent(cacheFile, contents);
 }
@@ -212,7 +212,7 @@ exports.execute = function(options) {
       removeLoader(options);
       removeFiles(options);
     }, function (err) {
-      console.error(err);
+      utils.log(err);
       throw err;
     });
 };

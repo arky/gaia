@@ -4,8 +4,8 @@
 /* global Event */
 /* global LogoLoader */
 /* global OrientationManager */
-/* global SettingsListener */
 /* global SettingsCache */
+/* global focusManager */
 
 (function(exports) {
 
@@ -71,6 +71,29 @@
     },
 
     /**
+     * Whether or not the sleep menu is focusable.
+     */
+    isFocusable() {
+      return this.visible;
+    },
+
+    /**
+     * returns the sleep menu dom element.
+     * @return {HTMLElement}
+     */
+    getElement: function sm_getElement() {
+      return this.elements.overlay;
+    },
+
+    /**
+     * focus back to its buttons.
+     */
+    focus: function sm_focus() {
+      document.activeElement.blur();
+      this.elements.cancel.focus();
+    },
+
+    /**
      * Populates this.elements with references to elements.
      * @memberof SleepMenu.prototype
      */
@@ -117,6 +140,7 @@
       SettingsCache.observe('audio.volume.notification', 7, function(value) {
         self.isSilentModeEnabled = (value === 0);
       });
+      focusManager.addUI(this);
     },
 
     /**
@@ -125,22 +149,21 @@
      */
     generateItems: function sm_generateItems() {
       var items = [];
-      var _ = navigator.mozL10n.get;
       var options = {
         airplane: {
-          label: _('airplane'),
+          label: 'airplane',
           value: 'airplane'
         },
         airplaneOff: {
-          label: _('airplaneOff'),
+          label: 'airplaneOff',
           value: 'airplane'
         },
         restart: {
-          label: _('restart'),
+          label: 'restart',
           value: 'restart'
         },
         power: {
-          label: _('power'),
+          label: 'power',
           value: 'power'
         }
       };
@@ -178,6 +201,8 @@
       this.elements.overlay.classList.add('visible');
       // Lock to default orientation
       screen.mozLockOrientation(OrientationManager.defaultOrientation);
+      // let focus manager to calculate the top most and focus for us.
+      focusManager.focus();
     },
 
     /**
@@ -189,7 +214,7 @@
       items.forEach(function traveseItems(item) {
         var item_li = document.createElement('li');
         item_li.dataset.value = item.value;
-        item_li.textContent = item.label;
+        item_li.setAttribute('data-l10n-id', item.label);
         item_li.setAttribute('role', 'menuitem');
         this.elements.container.appendChild(item_li);
       }, this);
@@ -205,6 +230,8 @@
       }
       this.elements.overlay.classList.remove('visible');
       window.dispatchEvent(new Event('sleepmenuhide'));
+      // focus back to the top most window/overlay.
+      focusManager.focus();
     },
 
     /**

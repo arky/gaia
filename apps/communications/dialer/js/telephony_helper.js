@@ -5,6 +5,9 @@
 /* exported TelephonyHelper */
 
 var TelephonyHelper = (function() {
+  // DTMF control digit separator length (ms) as defined in GSM ETSI GSM 02.07
+  const DTMF_SEPARATOR_PAUSE_DURATION = 3000;
+
   var confirmLoaded = false;
 
   var loadTelephonyMessages = function(callback) {
@@ -51,9 +54,57 @@ var TelephonyHelper = (function() {
               ondisconnected, onerror);
   };
 
+
+  function getNumberAsDtmfToneGroups(number) {
+    return number.split(',');
+  }
+
+  function playDtmfToneGroups(dtmfToneGroups, cardIndex) {
+    var length;
+
+    // Remove the dialed number from the beginning of the array.
+    dtmfToneGroups = dtmfToneGroups.slice(1);
+    length = dtmfToneGroups.length;
+
+    // Remove the latest entries from dtmfToneGroups corresponding to ','
+    //  characters not to play those pauses.
+    var lastCommaIndex = length - 1;
+    while (dtmfToneGroups[lastCommaIndex] === '') {
+      lastCommaIndex--;
+    }
+    dtmfToneGroups = dtmfToneGroups.slice(0, ++lastCommaIndex);
+    length = dtmfToneGroups.length;
+
+    var promise = Promise.resolve(),
+        counter = 0,
+        pauses;
+    // Traverse the dtmfToneGroups array.
+    while (counter < length) {
+      // Reset the number of pauses before each group of tones.
+      pauses = 1;
+      while (dtmfToneGroups[counter] === '') {
+        // Add a new pause for each '' in the dtmfToneGroups array.
+        pauses++;
+        counter++;
+      }
+      // Send a new group of tones as well as the pauses to play before it.
+      promise = promise.then(playDtmfToneGroup.bind(null,
+        dtmfToneGroups[counter++], pauses, cardIndex));
+    }
+    return promise;
+  }
+
+  function playDtmfToneGroup(toneGroup, pauses, cardIndex) {
+    return navigator.mozTelephony.sendTones(
+      toneGroup,
+      DTMF_SEPARATOR_PAUSE_DURATION * pauses,
+      null /* tone duration */,
+      cardIndex
+    );
+  }
+
   function startDial(cardIndex, conn, sanitizedNumber, oncall, onconnected,
                      ondisconnected, onerror) {
-
     var telephony = navigator.mozTelephony;
     if (!telephony) {
       return;
@@ -64,6 +115,7 @@ var TelephonyHelper = (function() {
       var emergencyOnly = conn.voice.emergencyCallsOnly;
       var hasCard = (conn.iccId !== null);
       var callPromise;
+      var baseNumber = getNumberAsDtmfToneGroups(sanitizedNumber)[0];
 
       // Note: no need to check for cardState null. While airplane mode is on
       // cardState is null and we handle that situation in call() above.
@@ -99,15 +151,15 @@ var TelephonyHelper = (function() {
         // If the mobileConnection has a sim card we let gecko take the
         // default service, otherwise we force the first slot.
         cardIndex = hasCard ? undefined : 0;
-        callPromise = telephony.dialEmergency(sanitizedNumber);
+        callPromise = telephony.dialEmergency(baseNumber);
       } else {
-        callPromise = telephony.dial(sanitizedNumber, cardIndex);
+        callPromise = telephony.dial(baseNumber, cardIndex);
       }
 
       callPromise.then(function(obj) {
         if (obj instanceof TelephonyCall) {
-          installHandlers(obj, sanitizedNumber, emergencyOnly, oncall,
-                          onconnected, ondisconnected, onerror);
+          installHandlers(obj, sanitizedNumber, emergencyOnly, cardIndex,
+                          oncall, onconnected, ondisconnected, onerror);
         } else {
           /* This is an MMICall object, manually invoke the handlers to provide
            * feedback to the user, the rest of the UX will be dealt with by the
@@ -131,12 +183,19 @@ var TelephonyHelper = (function() {
     });
   }
 
-  function installHandlers(call, number, emergencyOnly, oncall, onconnected,
-                           ondisconnected, onerror) {
+  function installHandlers(call, number, emergencyOnly, cardIndex,
+                           oncall, onconnected, ondisconnected, onerror) {
     if (oncall) {
       oncall();
     }
-    call.onconnected = onconnected;
+    var dtmfToneGroups = getNumberAsDtmfToneGroups(number);
+    if (dtmfToneGroups.length > 1) {
+      call.addEventListener('connected', function dtmfToneGroupPlayer() {
+        call.removeEventListener('connected', dtmfToneGroupPlayer);
+        playDtmfToneGroups(dtmfToneGroups, cardIndex);
+      });
+    }
+    call.addEventListener('connected', onconnected);
     call.ondisconnected = ondisconnected;
     call.onerror = function errorCB(evt) {
       if (onerror) {
@@ -153,7 +212,7 @@ var TelephonyHelper = (function() {
   }
 
   var isValid = function t_isValid(sanitizedNumber) {
-    var validExp = /^[0-9#+*]{1,50}$/;
+    var validExp = /^(?!,)([0-9#+*,]){1,50}$/;
     return validExp.test(sanitizedNumber);
   };
 

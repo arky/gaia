@@ -2,14 +2,15 @@
 
 var KeyboardTestApp = require('./lib/keyboard_test_app'),
     Keyboard = require('./lib/keyboard'),
-    assert = require('assert'),
-    Actions = require('marionette-client').Actions;
+    assert = require('assert');
 
 marionette('Dimiss the keyboard', function() {
   var apps = {};
   var keyboardTestApp = null;
   var keyboard = null;
+  var systemInputMgmt = null;
   var system = null;
+  var actions;
 
   apps[KeyboardTestApp.ORIGIN] = __dirname + '/keyboardtestapp';
 
@@ -17,14 +18,8 @@ marionette('Dimiss the keyboard', function() {
     apps: apps,
     prefs: {
       'focusmanager.testmode': true
-    },
-    settings: {
-      'lockscreen.enabled': false,
-      'ftu.manifestURL': null
     }
   });
-
-  var actions = new Actions(client);
 
   function longPressSpaceBar(time) {
     var spaceBarSelector = '.keyboard-type-container[data-active]' +
@@ -35,7 +30,9 @@ marionette('Dimiss the keyboard', function() {
   }
 
   setup(function() {
-    system = client.loader.getAppClass('keyboard', 'system');
+    actions = client.loader.getActions();
+    systemInputMgmt = client.loader.getAppClass('system', 'input_management');
+    system = client.loader.getAppClass('system');
     keyboard = new Keyboard(client);
 
     // create a keyboard test app
@@ -44,8 +41,8 @@ marionette('Dimiss the keyboard', function() {
     keyboardTestApp.textInput.click();
 
     // Wait for the keyboard pop up and switch to it
-    system.waitForKeyboardFrameDisplayed();
-    system.switchToActiveKeyboardFrame();
+    systemInputMgmt.waitForKeyboardFrameDisplayed();
+    systemInputMgmt.switchToActiveKeyboardFrame();
   });
 
   test('Longpressing the space bar should dimiss the keyboard', function() {
@@ -53,7 +50,7 @@ marionette('Dimiss the keyboard', function() {
     longPressSpaceBar(1.0);
 
     client.waitFor(function() {
-      return !system.keyboardFrameDisplayed();
+      return !systemInputMgmt.keyboardFrameDisplayed();
     });
 
     assert.ok(true);
@@ -66,5 +63,29 @@ marionette('Dimiss the keyboard', function() {
       client.findElement('.keyboard-type-container[data-active]');
 
     assert.ok(keyboardContainer.displayed());
+  });
+
+  test('Click on a non-input field, should dimiss keyboard', function() {
+    // Switch to test app frame.
+    client.switchToFrame();
+    client.apps.switchToApp(KeyboardTestApp.ORIGIN);
+
+    keyboardTestApp.nonInputArea.click();
+
+    client.waitFor(function() {
+      return !systemInputMgmt.keyboardFrameDisplayed();
+    });
+
+    assert.ok(true);
+  });
+
+  test('Pressing [Home] button should dimiss keyboard', function() {
+    system.tapHome();
+
+    client.waitFor(function() {
+      return !systemInputMgmt.keyboardFrameDisplayed();
+    });
+
+    assert.ok(true);
   });
 });

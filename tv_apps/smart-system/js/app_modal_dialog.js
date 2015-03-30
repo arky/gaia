@@ -1,7 +1,8 @@
-/* global AppModalDialog, AirplaneMode */
+/* global AppModalDialog, AirplaneMode, SimpleKeyNavigation, KeyEvent,
+          focusManager */
 'use strict';
 
-(function(window) {
+(function(exports) {
   var _ = navigator.mozL10n.get;
   var _id = 0;
 
@@ -16,18 +17,21 @@
    *                        where this dialog should popup.
    * @extends BaseUI
    */
-  window.AppModalDialog = function AppModalDialog(app) {
+  exports.AppModalDialog = function AppModalDialog(app) {
     this.app = app;
     this.containerElement = app.element;
     this.events = [];
     // One to one mapping.
     this.instanceID = _id++;
     this._injected = false;
+
+    this.simpleKeyNavigation = new SimpleKeyNavigation();
+
     app.element.addEventListener('mozbrowsershowmodalprompt', this);
     return this;
   };
 
-  AppModalDialog.prototype = Object.create(window.BaseUI.prototype);
+  AppModalDialog.prototype = Object.create(exports.BaseUI.prototype);
 
   AppModalDialog.prototype.CLASS_NAME = 'AppModalDialog';
 
@@ -47,6 +51,7 @@
     evt.stopPropagation();
     this.events.push(evt);
     if (!this._injected) {
+      focusManager.addUI(this);
       this.render();
     }
     this.show();
@@ -83,7 +88,7 @@
     var elements = this.elements;
     for (var id in elements) {
       var tagName = elements[id].tagName.toLowerCase();
-      if (tagName == 'button' || tagName == 'ul') {
+      if (tagName == 'smart-button' || tagName == 'ul') {
         if (elements[id].classList.contains('confirm')) {
           elements[id].addEventListener('click',
             this.confirmHandler.bind(this));
@@ -92,6 +97,20 @@
         }
       }
     }
+
+    // For prompt dialog
+    this.elements.promptInput.addEventListener('keyup', function(evt) {
+      if (evt.keyCode === KeyEvent.DOM_VK_RETURN) {
+        this.confirmHandler(evt);
+      }
+    }.bind(this));
+    // XXX: Since we are trying to keep enter key actioning on keyup; submit
+    // event should be prevented since it works on keydown. We can remove this
+    // workaround after changing containers from <form> to other DOM elements.
+    this.element.addEventListener('submit', function(evt){
+      focusManager.focus();
+      evt.preventDefault();
+    }.bind(this));
   };
 
   AppModalDialog.prototype.getTitle = function amd_getTitle() {
@@ -126,8 +145,9 @@
               '</p>' +
             '</div>' +
             '<menu>' +
-              '<button class="modal-dialog-alert-ok confirm affirmative" ' +
-              'data-l10n-id="ok">OK</button>' +
+              '<smart-button type="circle-text" ' +
+                'class="modal-dialog-alert-ok confirm affirmative" ' +
+                'data-l10n-id="ok">OK</smart-button>' +
             '</menu>' +
           '</form>' +
           '<form class="modal-dialog-confirm generic-dialog" ' +
@@ -139,10 +159,12 @@
               '</p>' +
             '</div>' +
             '<menu data-items="2">' +
-              '<button class="modal-dialog-confirm-cancel cancel" ' +
-              'data-l10n-id="cancel">Cancel</button>' +
-              '<button class="modal-dialog-confirm-ok confirm affirmative" ' +
-              'data-l10n-id="ok">OK</button>' +
+              '<smart-button type="circle-text"' +
+                'class="modal-dialog-confirm-cancel cancel"' +
+                'data-l10n-id="cancel">Cancel</smart-button>' +
+              '<smart-button type="circle-text"' +
+                'class="modal-dialog-confirm-ok confirm affirmative"' +
+                'data-l10n-id="ok">OK</smart-button>' +
             '</menu>' +
           '</form>' +
           '<form class="modal-dialog-prompt generic-dialog" ' +
@@ -155,10 +177,12 @@
               '</p>' +
             '</div>' +
             '<menu data-items="2">' +
-              '<button class="modal-dialog-prompt-cancel cancel"' +
-              ' data-l10n-id="cancel">Cancel</button>' +
-              '<button class="modal-dialog-prompt-ok confirm affirmative" ' +
-              'data-l10n-id="ok">OK</button>' +
+              '<smart-button type="circle-text" ' +
+                'class="modal-dialog-prompt-cancel cancel"' +
+                'data-l10n-id="cancel">Cancel</smart-button>' +
+              '<smart-button type="circle-text" ' +
+                'class="modal-dialog-prompt-ok confirm affirmative" ' +
+                'data-l10n-id="ok">OK</smart-button>' +
             '</menu>' +
           '</form>' +
           '<form class="modal-dialog-select-one generic-dialog" ' +
@@ -169,8 +193,9 @@
               '<ul class="modal-dialog-select-one-menu"></ul>' +
             '</div>' +
             '<menu>' +
-              '<button class="modal-dialog-select-one-cancel cancel" ' +
-              'data-l10n-id="cancel">Cancel</button>' +
+              '<smart-button type="circle-text" ' +
+              'class="modal-dialog-select-one-cancel cancel" ' +
+              'data-l10n-id="cancel">Cancel</smart-button>' +
             '</menu>' +
           '</form>' +
           '<form class="modal-dialog-custom-prompt generic-dialog" ' +
@@ -201,6 +226,7 @@
 
   AppModalDialog.prototype.kill = function amd_kill() {
     this.containerElement.removeChild(this.element);
+    focusManager.removeUI(this);
   };
 
   // Show relative dialog and set message/input value well
@@ -229,13 +255,27 @@
       message = escapeHTML(message);
     }
 
+    this._dialogType = type;
+    // TODO: Currently we only implmented key navigation for prompt dialog.
+    // Other dialogs also need to be implemented.
     switch (type) {
       case 'alert':
         elements.alertTitle.innerHTML = title;
         elements.alertMessage.innerHTML = message;
         elements.alert.classList.add('visible');
-        elements.alertOk.textContent = evt.yesText ? evt.yesText : _('ok');
-        elements.alert.focus();
+        if (evt.yesText) {
+          elements.alertOk.removeAttribute('data-l10n-id');
+          elements.alertOk.textContent = evt.yesText;
+        } else {
+          elements.alertOk.setAttribute('data-l10n-id', 'ok');
+        }
+
+        this.simpleKeyNavigation.start(
+          [elements.alertOk],
+          SimpleKeyNavigation.DIRECTION.HORIZONTAL,
+          {target: elements.alert});
+
+        focusManager.focus();
         break;
 
       case 'prompt':
@@ -243,26 +283,64 @@
         elements.promptInput.value = evt.detail.initialValue;
         elements.promptTitle.innerHTML = title;
         elements.promptMessage.innerHTML = message;
-        elements.promptOk.textContent = evt.yesText ? evt.yesText : _('ok');
-        elements.promptCancel.textContent = evt.noText ?
-          evt.noText : _('cancel');
-        elements.prompt.focus();
+
+        if (evt.yesText) {
+          elements.promptOk.removeAttribute('data-l10n-id');
+          elements.promptOk.textContent = evt.yesText;
+        } else {
+          elements.promptOk.setAttribute('data-l10n-id', 'ok');
+        }
+
+        if (evt.noText) {
+          elements.promptCancel.removeAttribute('data-l10n-id');
+          elements.promptCancel.textContent = evt.noText;
+        } else {
+          elements.promptCancel.setAttribute('data-l10n-id', 'cancel');
+        }
+
+        focusManager.focus();
+        var horizontalButtonNavigation = new SimpleKeyNavigation();
+        horizontalButtonNavigation.start(
+          [elements.promptCancel, elements.promptOk],
+          SimpleKeyNavigation.DIRECTION.HORIZONTAL,
+          {isChild: true});
+        this.simpleKeyNavigation.start(
+          [elements.promptInput, horizontalButtonNavigation],
+          SimpleKeyNavigation.DIRECTION.VERTICAL,
+          {target: elements.prompt});
+        elements.promptInput.select();
         break;
 
       case 'confirm':
         elements.confirm.classList.add('visible');
         elements.confirmTitle.innerHTML = title;
         elements.confirmMessage.innerHTML = message;
-        elements.confirmOk.textContent = evt.yesText ? evt.yesText : _('ok');
-        elements.confirmCancel.textContent = evt.noText ?
-          evt.noText : _('cancel');
-        elements.confirm.focus();
+
+        if (evt.yesText) {
+          elements.confirmOk.removeAttribute('data-l10n-id');
+          elements.promptOk.textContent = evt.yesText;
+        } else {
+          elements.confirmOk.setAttribute('data-l10n-id', 'ok');
+        }
+
+        if (evt.noText) {
+          elements.confirmCancel.removeAttribute('data-l10n-id');
+          elements.confirmCancel.textContent = evt.noText;
+        } else {
+          elements.confirmCancel.setAttribute('data-l10n-id', 'cancel');
+        }
+
+        focusManager.focus();
+        this.simpleKeyNavigation.start(
+          [elements.confirmCancel, elements.confirmOk],
+          SimpleKeyNavigation.DIRECTION.HORIZONTAL,
+          {target: elements.confirm});
         break;
 
       case 'selectone':
         this.buildSelectOneDialog(message);
         elements.selectOne.classList.add('visible');
-        elements.selectOne.focus();
+        focusManager.focus();
         break;
 
       case 'custom-prompt':
@@ -279,7 +357,7 @@
           domElement = document.createElement('button');
           domElement.dataset.buttonIndex = i;
           if (button.messageType === 'builtin') {
-            domElement.textContent = navigator.mozL10n.get(button.message);
+            domElement.setAttribute('data-l10n-id', button.message);
           } else if (button.messageType === 'custom') {
             // For custom button, we assume that the text is already translated
             domElement.textContent = button.message;
@@ -307,7 +385,7 @@
           checkbox.parentNode.classList.add('hidden');
         }
 
-        elements.customPrompt.focus();
+        focusManager.focus();
         break;
     }
 
@@ -316,22 +394,45 @@
   };
 
   AppModalDialog.prototype.hide = function amd_hide() {
-    this.element.blur();
+    this.simpleKeyNavigation.blur();
+    this.simpleKeyNavigation.stop();
     this.app.browser.element.removeAttribute('aria-hidden');
     this.element.classList.remove('visible');
-    if (this.app) {
-      this.app.focus();
-    }
+    focusManager.focus();
     if (!this.events.length) {
       return;
     }
 
     var evt = this.events[0];
     var type = evt.detail.promptType;
-    if (type === 'prompt') {
-      this.elements.promptInput.blur();
-    }
     this.elements[type].classList.remove('visible');
+  };
+
+  AppModalDialog.prototype.isFocusable = function amd_isVisible() {
+    return !!this.element && this.element.classList.contains('visible');
+  };
+
+  AppModalDialog.prototype.focus = function amd_show() {
+    // XXX: Focusing smart-button fails at the second time popup if we don't
+    // postpone it. We need to find the root cause.
+    setTimeout(function() {
+      document.activeElement.blur();
+      switch(this._dialogType) {
+        case 'selectone':
+          this.elements.selectOne.focus();
+          break;
+        case 'custom-prompt':
+          this.elements.customPrompt.focus();
+          break;
+        default:
+          this.simpleKeyNavigation && this.simpleKeyNavigation.focus();
+          break;
+      }
+    }.bind(this), 100);
+  };
+
+  AppModalDialog.prototype.getElement = function amd_getElement() {
+    return this.element;
   };
 
   // When user clicks OK button on alert/confirm/prompt
@@ -467,4 +568,4 @@
 
       return title;
     };
-}(this));
+}(window));

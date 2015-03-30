@@ -1,18 +1,19 @@
 'use strict';
+
 /* global contacts */
 /* global Contacts */
-/* global MockImportStatusData */
-/* global MockCookie */
+/* global MockMozContacts */
 /* global MockContactsIndexHtml */
+/* global MockCookie */
 /* global MockgetDeviceStorage */
 /* global MocksHelper */
 /* global MockIccManager */
-/* global MockMozContacts */
-/* global MockNavigatorMozMobileConnections */
+/* global MockImportStatusData */
 /* global MockMozL10n */
+/* global MockNavigatorMozMobileConnections */
+/* global MockNavigatorSettings */
 /* global MockSdCard */
 /* global utils */
-/* global MockNavigatorSettings */
 
 require('/shared/js/lazy_loader.js');
 require('/shared/js/contacts/import/utilities/misc.js');
@@ -20,6 +21,7 @@ require('/shared/js/contacts/utilities/event_listeners.js');
 require('/shared/test/unit/mocks/mock_navigator_moz_settings.js');
 require('/shared/test/unit/mocks/mock_navigator_moz_mobile_connections.js');
 require('/shared/test/unit/mocks/mock_iccmanager.js');
+requireApp('communications/contacts/test/unit/mock_cache.js');
 requireApp('communications/contacts/test/unit/mock_contacts_index.html.js');
 requireApp('communications/contacts/test/unit/mock_navigation.js');
 requireApp('communications/contacts/test/unit/mock_contacts.js');
@@ -71,8 +73,13 @@ if (!window.realMozIccManager) {
 }
 
 var mocksHelperForContactSettings = new MocksHelper([
-  'Contacts', 'ImportStatusData', 'asyncStorage', 'fb', 'ConfirmDialog',
-  'IccHelper'
+  'asyncStorage',
+  'Cache',
+  'ConfirmDialog',
+  'Contacts',
+  'fb',
+  'IccHelper',
+  'ImportStatusData'
 ]);
 mocksHelperForContactSettings.init();
 
@@ -185,8 +192,8 @@ suite('Contacts settings >', function() {
       assert.isNotNull(importButton1);
 
       // We test as well that the l10NIds are correctly set
-      assert.equal(spyL10n.args[0][1], 'simNumber');
-      assert.equal(spyL10n.args[1][1], 'simNumber');
+      assert.equal(spyL10n.args[0][1], 'simNumberNoMSISDN');
+      assert.equal(spyL10n.args[1][1], 'simNumberNoMSISDN');
     });
 
     test('Check number of export buttons appearing', function() {

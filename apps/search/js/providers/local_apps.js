@@ -14,10 +14,12 @@
 
     mozApps.oninstall = function oninstall(e) {
       self.apps[e.application.manifestURL] = e.application;
+      self.createAppListing();
     };
 
     mozApps.onuninstall = function oninstall(e) {
       delete self.apps[e.application.manifestURL];
+      self.createAppListing();
     };
 
     mozApps.getAll().onsuccess = function r_getApps(e) {
@@ -59,9 +61,12 @@
 
       manifestURLs.forEach(function eachManifest(manifestURL) {
         var app = this.apps[manifestURL];
-        var manifest = app.manifest;
+        var manifest = app.manifest || app.updateManifest;
 
-        var HIDDEN_ROLES = ['system', 'input', 'homescreen', 'search'];
+        var HIDDEN_ROLES = [
+          'system', 'input', 'homescreen', 'search', 'theme', 'addon',
+          'langpack'
+        ];
         if (HIDDEN_ROLES.indexOf(manifest.role) !== -1) {
           return;
         }
@@ -126,12 +131,14 @@
       query = query.toLowerCase();
 
       // Get the localized name from the query.
+      var shortName = manifest.short_name || '';
       var userLang = document.documentElement.lang;
       var locales = manifest.locales;
       var localized = locales && locales[userLang] && locales[userLang].name;
       localized = localized || '';
 
-      return manifest.name.toLowerCase().indexOf(query) != -1 ||
+      return shortName.toLowerCase().indexOf(query) != -1 ||
+        manifest.name.toLowerCase().indexOf(query) != -1 ||
         localized.toLowerCase().indexOf(query) != -1;
     },
 

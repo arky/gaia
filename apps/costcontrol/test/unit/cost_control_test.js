@@ -5,6 +5,8 @@
 
 require('/test/unit/mock_debug.js');
 require('/test/unit/mock_common.js');
+require('/shared/test/unit/mocks/mock_lazy_loader.js');
+require('/test/unit/mock_airplane_mode_helper.js');
 require('/shared/test/unit/mocks/mock_navigator_moz_mobile_connections.js');
 require('/test/unit/mock_config_manager.js');
 require('/test/unit/mock_moz_network_stats.js');
@@ -24,8 +26,11 @@ if (!window.navigator.mozNetworkStats) {
 }
 
 var MocksHelperForUnitTest = new MocksHelper([
+  'AirplaneModeHelper',
   'Common',
-  'ConfigManager'
+  'ConfigManager',
+  'LazyLoader'
+
 ]).init();
 
 suite('Cost Control Service Hub Suite >', function() {
@@ -489,6 +494,86 @@ suite('Cost Control Service Hub Suite >', function() {
 
           SimManager.requestDataSimIcc.restore();
           done();
+        });
+      });
+    }
+  );
+
+  test(
+    'Get datausage per app shows browser App',
+    function(done) {
+      var expectedLastDataUsage = {
+        mobile: { total: 10000, apps: {} },
+        wifi: { total: 20000, apps: {} }
+      };
+
+      var fakeSettings = { lastDataUsage: expectedLastDataUsage };
+
+      this.sinon.stub(SimManager, 'requestDataSimIcc', function (callback) {
+        (typeof callback === 'function') && callback({iccId:'12345'});
+      });
+
+      window.ConfigManager = new MockConfigManager({
+        fakeSettings: fakeSettings
+      });
+
+      CostControl.getInstance(function(service) {
+        var manifests = [MockMozNetworkStats.APP_MANIFEST_1,
+                         Common.BROWSER_APP.manifestURL];
+        service.request({type: 'datausage', apps: manifests}, function(result) {
+          assert.equal(result.status, 'success');
+          assert.equal(Object.keys(result.data.mobile.apps).length, 2);
+
+          var apps = result.data.mobile.apps;
+          var app1 = apps[MockMozNetworkStats.APP_MANIFEST_1];
+          var browserApp = apps[Common.BROWSER_APP.manifestURL];
+
+          assert.equal(app1.total, 1047);
+          assert.equal(browserApp.total, 595);
+          assert.equal(result.data.mobile.total, app1.total + browserApp.total);
+
+          assert.equal(
+            fakeSettings.lastDataUsage.mobile.total,
+            expectedLastDataUsage.mobile.total
+          );
+
+          done();
+        });
+      });
+    }
+  );
+
+  test('Querying data usage globally caches the result', function(done) {
+    this.sinon.stub(SimManager, 'requestDataSimIcc').yields({iccId: '12345'});
+
+    CostControl.getInstance(function(service) {
+      var lastDataUsagePerApp = {};
+      service.lastDataUsagePerApp = lastDataUsagePerApp;
+      service.request({type: 'datausage'}, function(result) {
+        done(function() {
+          assert.deepEqual(service.lastDataResults, result.data);
+          assert.deepEqual(service.lastDataResultsPerApp, lastDataUsagePerApp);
+        });
+      });
+    });
+  });
+
+  test(
+    'Data cache per App is refreshed after a request per App',
+    function(done) {
+      this.sinon.stub(SimManager, 'requestDataSimIcc').yields({iccId: '12345'});
+
+      CostControl.getInstance(function(service) {
+        // Request per app
+        var manifests = [MockMozNetworkStats.APP_MANIFEST_1,
+                         MockMozNetworkStats.APP_MANIFEST_2];
+        var lastDataUsage = {};
+        service.lastDataUsage = lastDataUsage;
+        service.request({type: 'datausage', apps: manifests}, function(result) {
+          done(function() {
+            assert.deepEqual(service.lastDataResultsPerApp, result.data);
+            assert.deepEqual(service.lastDataResults, lastDataUsage);
+          });
         });
       });
     }

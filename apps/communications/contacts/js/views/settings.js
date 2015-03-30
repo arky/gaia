@@ -1,5 +1,6 @@
 'use strict';
 /* global _ */
+/* global Cache */
 /* global ConfirmDialog */
 /* global Contacts */
 /* global ContactsBTExport */
@@ -346,36 +347,59 @@ contacts.Settings = (function() {
   function doExport(strategy) {
     // Launch the selection mode in the list, and then invoke
     // the export with the selected strategy.
-    contacts.List.selectFromList(_('exportContactsAction'),
-      function onSelectedContacts(promise) {
-        // Resolve the promise, meanwhile show an overlay to
-        // warn the user of the ongoin operation, dismiss it
-        // once we have the result
-        requireOverlay(function _loaded() {
-          utils.overlay.show('preparing-contacts', null, 'spinner');
-          promise.onsuccess = function onSuccess(ids) {
-            // Once we start the export process we can exit from select mode
-            // This will have to evolve once export errors can be captured
-            contacts.List.exitSelectMode();
-            var exporter = new ContactsExporter(strategy);
-            exporter.init(ids, function onExporterReady() {
-              // Leave the contact exporter to deal with the overlay
-              exporter.start();
-            });
-          };
-          promise.onerror = function onError() {
-            contacts.List.exitSelectMode();
-            utils.overlay.hide();
-          };
-        });
-      },
-      null,
-      navigationHandler,
-      {
-        isDanger: false,
-        transitionLevel: EXPORT_TRANSITION_LEVEL
-      }
-    );
+
+    // We need to know the number of FB contacts in the device to filter them
+    // out properly.
+    var numFbContactsReq = fb.utils.getNumFbContacts();
+
+    numFbContactsReq.onsuccess = function() {
+      openSelectList(numFbContactsReq.result);
+    };
+
+    numFbContactsReq.onerror = function() {
+      openSelectList(0);
+      console.error('Number of fb contacts in device could not be retrieved',
+        numFbContactsReq.error && numFbContactsReq.error.name);
+    };
+
+    function openSelectList(numFilteredContacts) {
+      contacts.List.selectFromList(_('exportContactsAction'),
+        function onSelectedContacts(promise) {
+          // Resolve the promise, meanwhile show an overlay to
+          // warn the user of the ongoin operation, dismiss it
+          // once we have the result
+          requireOverlay(function _loaded() {
+            utils.overlay.show('preparing-contacts', null, 'spinner');
+            promise.onsuccess = function onSuccess(ids) {
+              // Once we start the export process we can exit from select mode
+              // This will have to evolve once export errors can be captured
+              contacts.List.exitSelectMode();
+              var exporter = new ContactsExporter(strategy);
+              exporter.init(ids, function onExporterReady() {
+                // Leave the contact exporter to deal with the overlay
+                exporter.start();
+              });
+            };
+            promise.onerror = function onError() {
+              contacts.List.exitSelectMode();
+              utils.overlay.hide();
+            };
+          });
+        },
+        null,
+        navigationHandler,
+        {
+          isDanger: false,
+          transitionLevel: EXPORT_TRANSITION_LEVEL,
+          filterList: [
+            {
+              'containerClass': 'disable-fb-items',
+              'numFilteredContacts': numFilteredContacts
+            }
+          ]
+        }
+      );
+    }
   }
 
   // Options checking & updating
@@ -486,11 +510,13 @@ contacts.Settings = (function() {
     fbImportCheck.checked = true;
     fbImportCheckContainer.setAttribute('aria-checked', true);
     document.dispatchEvent(new CustomEvent('facebookEnabled'));
+    Cache.evict();
   }
 
   function fbSetDisabledState() {
     fbImportCheck.checked = false;
     fbImportCheckContainer.setAttribute('aria-checked', false);
+    Cache.evict();
   }
 
   // Get total number of contacts imported from fb
@@ -690,6 +716,7 @@ contacts.Settings = (function() {
     newOrderByLastName = !orderCheckBox.checked;
     utils.cookie.update({order: newOrderByLastName});
     updateOrderingUI();
+    Cache.evict();
   };
 
   // Import contacts from SIM card and updates ui
@@ -816,6 +843,7 @@ contacts.Settings = (function() {
 
     utils.sdcard.retrieveFiles([
       'text/vcard',
+      'text/x-vcard',
       'text/directory;profile=vCard',
       'text/directory'
     ], ['vcf', 'vcard'], function(err, fileArray) {
@@ -925,7 +953,7 @@ contacts.Settings = (function() {
   // Dismiss settings window and execute operations if values got modified
   var close = function close() {
     if (newOrderByLastName != null &&
-      newOrderByLastName != orderByLastName && contacts.List) {
+        newOrderByLastName != orderByLastName && contacts.List) {
       contacts.List.setOrderByLastName(newOrderByLastName);
       // Force the reset of the dom, we know that we changed the order
       contacts.List.load(null, true);

@@ -1,5 +1,5 @@
 /* global LazyLoader, AppWindowManager, applications, ManifestHelper*/
-/* global Template*/
+/* global Template, focusManager */
 'use strict';
 (function(exports) {
   /**
@@ -97,6 +97,8 @@
       this.overlay.addEventListener('mousedown', function onMouseDown(evt) {
         evt.preventDefault();
       });
+
+      focusManager.addUI(this);
     },
 
     /**
@@ -104,6 +106,7 @@
      * @memberof PermissionManager.prototype
      */
     stop: function pm_stop() {
+      focusManager.removeUI(this);
       this.currentOrigin = null;
       this.permissionType = null;
       this.currentPermissions = null;
@@ -301,10 +304,11 @@
         this.fullscreenRequest = undefined;
       }
       if (detail.fullscreenorigin !== AppWindowManager.getActiveApp().origin) {
-        var _ = navigator.mozL10n.get;
         // The message to be displayed on the approval UI.
-        var message =
-          _('fullscreen-request', { 'origin': detail.fullscreenorigin });
+        var message = {
+          id: 'fullscreen-request',
+          args: { 'origin': detail.fullscreenorigin }
+        };
         this.fullscreenRequest =
           this.requestPermission(detail.id, detail.origin, detail.permission,
                                  message, '',
@@ -331,28 +335,41 @@
 
       var message = '';
       var permissionID = 'perm-' + this.permissionType.replace(':', '-');
-      var _ = navigator.mozL10n.get;
 
       if (detail.isApp) { // App
         var app = applications.getByManifestURL(detail.manifestURL);
-        message = _(permissionID + '-appRequest',
-          { 'app': new ManifestHelper(app.manifest).name });
+        message = {
+          id: permissionID + '-appRequest',
+          args: { 'app': new ManifestHelper(app.manifest).name }
+        };
 
-        this.title.innerHTML = _('title-app');
+        this.title.setAttribute('data-l10n-id', 'title-app');
         if (this.isCamSelector) {
-          this.title.innerHTML = _('title-cam');
+          this.title.setAttribute('data-l10n-id', 'title-cam');
         }
-        this.deviceSelector.innerHTML = _('perm-camera-selector-appRequest',
-            { 'app': new ManifestHelper(app.manifest).name });
+        navigator.mozL10n.setAttributes(
+          this.deviceSelector,
+          'perm-camera-selector-appRequest',
+          { 'app': new ManifestHelper(app.manifest).name }
+        );
       } else { // Web content
-        message = _(permissionID + '-webRequest', { 'site': detail.origin });
+        message = {
+          id: permissionID + '-webRequest',
+          args: { 'site': detail.origin }
+        };
 
-        this.title.innerHTML = _('title-web');
-        this.deviceSelector.innerHTML = _('perm-camera-selector-webRequest',
-            { 'site': detail.origin });
+        this.title.setAttribute('data-l10n-id', 'title-web');
+        navigator.mozL10n.setAttributes(
+          this.deviceSelector,
+          'perm-camera-selector-webRequest',
+          { 'site': detail.origin }
+        );
       }
 
-      var moreInfoText = _(permissionID + '-more-info');
+      var moreInfoText = {
+        id: permissionID + '-more-info',
+        args: null
+      };
       var self = this;
       this.requestPermission(detail.id, detail.origin, this.permissionType,
         message, moreInfoText,
@@ -408,10 +425,8 @@
       this.hideInfoLink.removeEventListener('click',
         this.moreInfoHandler);
       this.moreInfo.classList.add('hidden');
-      // XXX: This is telling AppWindowManager to focus the active app.
-      // After we are moving into AppWindow, we need to remove that
-      // and call this.app.focus() instead.
       this.publish('permissiondialoghide');
+      focusManager.focus();
     },
 
     publish: function(eventName, detail) {
@@ -509,7 +524,6 @@
      * @memberof PermissionManager.prototype
      */
     listDeviceOptions: function pm_listDeviceOptions() {
-      var _ = navigator.mozL10n.get;
       var self = this;
       var template = new Template('device-list-item-tmpl');
       var checked;
@@ -530,7 +544,7 @@
         item_li.innerHTML = template.interpolate({
                               id: option,
                               checked: checked,
-                              label: _('device-' + option)
+                              label: 'device-' + option
                             });
         self.devices.appendChild(item_li);
       });
@@ -547,7 +561,7 @@
           id, msg, moreInfoText, yescallback, nocallback) {
       // Note plain text since this may include text from
       // untrusted app manifests, for example.
-      this.message.textContent = msg;
+      navigator.mozL10n.setAttributes(this.message, msg.id, msg.args);
       if (moreInfoText) {
         // Show the "More info… " link.
         this.moreInfo.classList.remove('hidden');
@@ -555,7 +569,11 @@
         this.hideInfoHandler = this.clickHandler.bind(this);
         this.moreInfoLink.addEventListener('click', this.moreInfoHandler);
         this.hideInfoLink.addEventListener('click', this.hideInfoHandler);
-        this.moreInfoBox.textContent = moreInfoText;
+        navigator.mozL10n.setAttributes(
+          this.moreInfoBox,
+          moreInfoText.id,
+          moreInfoText.args
+        );
       }
       this.currentRequestId = id;
 
@@ -568,15 +586,22 @@
       var isSharedPermission = this.isVideo || this.isAudio ||
            this.permissionType === 'geolocation';
 
-      var _ = navigator.mozL10n.get;
-      this.yes.textContent =
-        isSharedPermission ? _('share-' + this.permissionType) : _('allow');
+      if (isSharedPermission) {
+        this.yes.setAttribute('data-l10n-id', 'share-' + this.permissionType);
+      } else {
+        this.yes.setAttribute('data-l10n-id', 'allow');
+      }
       this.yesHandler = this.clickHandler.bind(this);
       this.yes.addEventListener('click', this.yesHandler);
       this.yes.callback = yescallback;
 
-      this.no.textContent = isSharedPermission ?
-          _('dontshare-' + this.permissionType) : _('dontallow');
+      if (isSharedPermission) {
+        this.no.setAttribute('data-l10n-id',
+          'dontshare-' + this.permissionType
+        );
+      } else {
+        this.no.setAttribute('data-l10n-id', 'dontallow');
+      }
       this.noHandler = this.clickHandler.bind(this);
       this.no.addEventListener('click', this.noHandler);
       this.no.callback = nocallback;
@@ -587,10 +612,11 @@
         this.rememberSection.style.display = 'none';
         this.buttons.dataset.items = 1;
         this.no.style.display = 'none';
-        this.yes.textContent = _('ok');
+        this.yes.setAttribute('data-l10n-id', 'ok');
       }
       // Make the screen visible
       this.overlay.classList.add('visible');
+      focusManager.focus();
     },
 
     /**
@@ -630,6 +656,35 @@
       this.dispatchResponse(this.currentRequestId, 'permission-deny', false);
       this.hidePermissionPrompt();
       this.pending = [];
+    },
+
+    /**
+     * Check if any prompt is focusable
+     * @memberof PermissionManager.prototype
+     * @return {Boolean} If any prompt is focusable or not.
+     */
+    isFocusable: function pm_isFocusable() {
+      return this.overlay.classList.contains('visible');
+    },
+
+    /**
+     * get the dom element of this UI.
+     * @memberof PermissionManager.prototype
+     * @return {HTMLElement} dom element.
+     */
+    getElement: function pm_getElement() {
+      return this.overlay;
+    },
+
+    /**
+     * try to focus the default element
+     * @memberof PermissionManager.prototype
+     */
+    focus: function pm_focus() {
+      setTimeout(function() {
+        document.activeElement.blur();
+        this.no.focus();
+      }.bind(this));
     }
   };
 

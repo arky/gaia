@@ -683,7 +683,19 @@ ImapJobDriver.prototype = {
 
         // - got the target folder conn, now do the copies
         function gotTargetConn(targetConn, targetStorage) {
-          var uidnext = targetConn.box.uidNext;
+          var usingUid, nextId;
+          // Some servers don't provide
+          if (targetConn.box.uidNext) {
+            usingUid = true;
+            nextId = targetConn.box.uidNext;
+          } else {
+            usingUid = false;
+            // Message sequence numbers are 1-based, so if 0 exist, then 1 is
+            // the sequence number of the next message.  If 1 exists, its
+            // number is 1, and the next number is 2.  And so on.
+            nextId = targetConn.box.exists + 1;
+          }
+
           folderConn._conn.copyMessages(serverIds.join(','),
                                         targetStorage.folderMeta.path,
                                         { byUid: true },
@@ -701,9 +713,9 @@ ImapJobDriver.prototype = {
           // - copies are done, find the UIDs
           function copiedMessages_findNewUIDs() {
             var fetcher = targetConn._conn.listMessages(
-              uidnext + ':*',
+              nextId + ':*',
               ['UID', 'BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)]'],
-              { byUid: true },
+              { byUid: usingUid },
               function (err, messages) {
                 if (err) {
                   perFolderDone();
@@ -735,7 +747,6 @@ ImapJobDriver.prototype = {
                     }
                     var namer = guidToNamer[guid];
                     stateDelta.serverIdMap[namer.suid] = msg.uid;
-                    uidnext = msg.uid + 1;
                     var newSuid = state.moveMap[namer.suid];
                     var newId =
                           parseInt(newSuid.substring(newSuid.lastIndexOf('/') + 1));

@@ -4,6 +4,7 @@
 'use strict';
 
 require('/shared/js/component_utils.js');
+require('/shared/js/event_safety.js');
 require('/shared/elements/gaia_progress/script.js');
 require('/shared/test/unit/mocks/mock_l10n.js');
 require('/shared/test/unit/mocks/mock_lazy_loader.js');
@@ -92,6 +93,9 @@ suite('system/AppChrome', function() {
     }
   };
 
+  var fadeTransitionEndEvent = new CustomEvent('transitionend');
+  fadeTransitionEndEvent.propertyName = 'background-color';
+
   suite('Old Navigation - Application events', function() {
     test('app is loading', function() {
       var app = new AppWindow(fakeWebSite);
@@ -131,6 +135,18 @@ suite('system/AppChrome', function() {
       assert.isTrue(stubSelectOne.called);
     });
 
+    test('app ssl state is changed', function() {
+      var app = new AppWindow(fakeWebSite);
+      this.sinon.stub(app, 'getSSLState', function() {
+        return 'broken';
+      });
+      var chrome = new AppChrome(app);
+      var stubHandleSecurityChanged =
+        this.sinon.spy(chrome, 'handleSecurityChanged');
+      chrome.handleEvent({ type: '_securitychange' });
+      assert.isTrue(stubHandleSecurityChanged.called);
+      assert.equal(chrome.title.dataset.ssl, 'broken');
+    });
   });
 
   suite('Views', function() {
@@ -157,6 +173,8 @@ suite('system/AppChrome', function() {
       var app = new AppWindow(fakeWebSite);
       var chrome = new AppChrome(app);
       var stubBack = this.sinon.stub(app, 'back');
+      assert.equal(chrome.backButton.getAttribute('data-l10n-id'),
+        'back-button');
       chrome.handleEvent({ type: 'click', target: chrome.backButton });
       assert.isTrue(stubBack.called);
     });
@@ -165,6 +183,8 @@ suite('system/AppChrome', function() {
       var app = new AppWindow(fakeWebSite);
       var chrome = new AppChrome(app);
       var stubForward = this.sinon.stub(app, 'forward');
+      assert.equal(chrome.forwardButton.getAttribute('data-l10n-id'),
+        'forward-button');
       chrome.handleEvent({ type: 'click', target: chrome.forwardButton });
       assert.isTrue(stubForward.called);
     });
@@ -192,6 +212,8 @@ suite('system/AppChrome', function() {
     test('windows', function(done) {
       var app = new AppWindow(fakeSearchApp);
       var chrome = new AppChrome(app);
+      assert.equal(chrome.windowsButton.getAttribute('data-l10n-id'),
+        'windows-button');
       window.addEventListener('taskmanagershow', function() {
         done();
       });
@@ -289,6 +311,45 @@ suite('system/AppChrome', function() {
                            detail: 'Hello' });
 
       assert.equal(chrome.title.textContent, 'Hello');
+    });
+
+    suite('error', function() {
+      var app, chrome;
+
+      setup(function() {
+        app = new AppWindow(fakeWebSite);
+      });
+
+      test('scrollable chrome without bar', function() {
+        app.config.chrome.bar = false;
+        app.config.chrome.scrollable = true;
+        chrome = new AppChrome(app);
+        chrome.containerElement.classList.add('scrollable');
+        chrome.handleEvent({ type: 'mozbrowsererror', detail: {
+          type: 'offline'
+        }});
+        assert.isTrue(chrome.element.classList.contains('maximized'));
+      });
+
+      test('not scrollable chrome without bar', function() {
+        app.config.chrome.bar = false;
+        app.config.chrome.scrollable = false;
+        chrome = new AppChrome(app);
+        chrome.handleEvent({ type: 'mozbrowsererror', detail: {
+          type: 'offline'
+        }});
+        assert.isFalse(chrome.element.classList.contains('maximized'));
+      });
+
+      test('scrollable chrome with bar', function() {
+        app.config.chrome.bar = true;
+        app.config.chrome.scrollable = true;
+        chrome = new AppChrome(app);
+        chrome.handleEvent({ type: 'mozbrowsererror', detail: {
+          type: 'fatal'
+        }});
+        assert.isFalse(chrome.element.classList.contains('maximized'));
+      });
     });
   });
 
@@ -465,20 +526,43 @@ suite('system/AppChrome', function() {
     var app, chrome, stubRequestAnimationFrame, appPublishStub;
 
     setup(function() {
+      this.sinon.clock.restore();
       app = new AppWindow(fakeWebSite);
       chrome = new AppChrome(app);
       stubRequestAnimationFrame =
-        this.sinon.stub(window, 'requestAnimationFrame', function(cb) {
-
-        cb();
-      });
+        this.sinon.stub(window, 'requestAnimationFrame').yieldsAsync();
       appPublishStub = this.sinon.stub(app, 'publish');
+    });
+
+    teardown(function(done) {
+      // setThemeColor triggers a rAF loop that doesn't finish until
+      // it gets a transitionend event. Some tests dispatch this event
+      // but others don't so we dispatch it again here in case it hasn't
+      // been dispatched yet.
+      //
+      // If we fail to do this, the rAF loop triggered by a previous test
+      // might still be running when we start the next test which will
+      // mean we *sometimes* get surprising values for
+      // stubRequestAnimationFrame.callCount.
+      //
+      // Note that here we only make sure the rAF loop on |chrome| has
+      // finished. Individual tests are responsible for firing a
+      // transitionend event at the element of any additional AppChrome
+      // objects they create.
+      chrome.element.dispatchEvent(fadeTransitionEndEvent);
+
+      // To ensure the transitionend event has been processed, wait for a
+      // *real* requestAnimationFrame tick.
+      window.requestAnimationFrame.restore();
+      // Make sure we pass null to |done| otherwise it will complain that
+      // its argument is not an Error object.
+      window.requestAnimationFrame(done.bind(null, null));
     });
 
     test('metachange already set', function() {
       app.themeColor = 'orange';
 
-      var chrome = new AppChrome(app);
+      chrome = new AppChrome(app);
       assert.equal(chrome.element.style.backgroundColor, 'orange');
     });
 
@@ -517,36 +601,53 @@ suite('system/AppChrome', function() {
       assert.equal(chrome.element.style.backgroundColor, 'red');
     });
 
-    test('dark color have light icons', function() {
+    test('dark color have light icons', function(done) {
+      var initiallyLight = app.element.classList.contains('light');
       chrome.setThemeColor('black');
-      assert.isTrue(stubRequestAnimationFrame.called);
-      assert.isFalse(app.element.classList.contains('light'));
-      assert.isFalse(chrome.useLightTheming());
-      assert.isTrue(appPublishStub.called);
-      assert.isTrue(appPublishStub.calledWith('titlestatechanged'));
+      window.setTimeout(function() {
+        chrome.element.dispatchEvent(fadeTransitionEndEvent);
+        assert.isTrue(stubRequestAnimationFrame.called);
+        assert.isFalse(app.element.classList.contains('light'));
+        assert.isFalse(chrome.useLightTheming());
+        sinon.assert.callCount(appPublishStub.withArgs('titlestatechanged'),
+          initiallyLight ? 1 : 0);
+        done();
+      }, 0);
     });
 
-    test('light color have dark icons', function() {
+    test('light color have dark icons', function(done) {
+      var initiallyLight = app.element.classList.contains('light');
       chrome.setThemeColor('white');
-      assert.isTrue(stubRequestAnimationFrame.called);
-      assert.isTrue(app.element.classList.contains('light'));
-      assert.isTrue(chrome.useLightTheming());
-      assert.isTrue(appPublishStub.called);
-      assert.isTrue(appPublishStub.calledWith('titlestatechanged'));
+      window.setTimeout(function() {
+        chrome.element.dispatchEvent(fadeTransitionEndEvent);
+        assert.isTrue(stubRequestAnimationFrame.called);
+        assert.isTrue(app.element.classList.contains('light'));
+        assert.isTrue(chrome.useLightTheming());
+        sinon.assert.callCount(appPublishStub.withArgs('titlestatechanged'),
+          initiallyLight ? 0 : 1);
+        done();
+      }, 0);
     });
 
-    test('popup window will use rear window color theme', function() {
+    test('popup window will use rear window color theme', function(done) {
       var popup = new PopupWindow(fakeWebSite);
       var popupChrome = new AppChrome(popup);
+      this.sinon.stub(popup, 'getBottomMostWindow').returns(app);
       chrome.setThemeColor('black');
       popupChrome.setThemeColor('white');
       popup.appChrome = popupChrome;
       app.appChrome = chrome;
-      popup.rearWindow = app;
-      assert.isTrue(stubRequestAnimationFrame.called);
-      assert.isTrue(popupChrome.useLightTheming());
-      assert.isTrue(appPublishStub.called);
-      assert.isTrue(appPublishStub.calledWith('titlestatechanged'));
+      window.setTimeout(function() {
+        chrome.element.dispatchEvent(fadeTransitionEndEvent);
+        assert.isTrue(stubRequestAnimationFrame.called);
+        assert.equal(chrome.useLightTheming(), popupChrome.useLightTheming());
+        assert.equal(app.themeColor, 'black');
+        assert.equal(popup.themeColor, 'black');
+        sinon.assert.calledOnce(appPublishStub.withArgs('titlestatechanged'));
+        // End popup rAF look so it doesn't interfere with other tests
+        popupChrome.element.dispatchEvent(fadeTransitionEndEvent);
+        done();
+      }, 0);
     });
 
     test('browser scrollable background is black', function() {
@@ -555,40 +656,44 @@ suite('system/AppChrome', function() {
       assert.equal(chrome.scrollable.style.backgroundColor, 'black');
     });
 
-    test('should stop requesting frames when color stops changing', function() {
-      chrome.scrollable.style.backgroundColor, '#fff';
-      chrome.setThemeColor('#fff');
-      assert.isTrue(stubRequestAnimationFrame.calledTwice);
+    test('should stop requesting frames when transition ends', function(done) {
+      chrome.setThemeColor('white');
+      chrome.element.dispatchEvent(fadeTransitionEndEvent);
+      window.setTimeout(function() {
+        sinon.assert.calledOnce(stubRequestAnimationFrame);
+        done();
+      }, 0);
     });
 
-    test('should keep requesting frames while color changes', function() {
-      var count = 0;
-      sinon.stub(window, 'getComputedStyle', function() {
-        var style = {};
-        switch (count) {
-          case 0:
-            style.backgroundColor = 'rgb(1, 2, 3)';
-            break;
-          case 1:
-            style.backgroundColor = 'rgb(2, 3, 4)';
-            break;
-          case 2:
-          case 3:
-            style.backgroundColor = 'rgb(3, 4, 5)';
-            break;
-        }
-        count++;
-        return style;
-      });
-      chrome.setThemeColor('#fff');
-      assert.equal(stubRequestAnimationFrame.callCount, 4);
-      window.getComputedStyle.restore();
+    test('should ignore unrelated transition events', function(done) {
+      chrome.setThemeColor('white');
+      window.setTimeout(function() {
+        var previousCallCount = stubRequestAnimationFrame.callCount;
+        var transformEvent = new CustomEvent('transitionend');
+        transformEvent.propertyName = 'transform';
+        chrome.element.dispatchEvent(transformEvent);
+        window.setTimeout(function() {
+          assert.isTrue(stubRequestAnimationFrame.callCount > previousCallCount,
+                       'requestAnimationFrame continues to be called after ' +
+                       'an unrelated transition event');
+          done();
+        }, 0);
+      }, 0);
     });
 
     test('homescreen scrollable background is unset', function() {
       app.isHomescreen = true;
       var chrome = new AppChrome(app);
 
+      assert.equal(chrome.scrollable.style.backgroundColor, '');
+      chrome.setThemeColor('black');
+      assert.equal(chrome.scrollable.style.backgroundColor, '');
+    });
+
+    test('does not set for private windows', function() {
+      app = new AppWindow(fakeWebSite);
+      this.sinon.stub(app, 'isPrivateBrowser').returns(true);
+      chrome = new AppChrome(app);
       assert.equal(chrome.scrollable.style.backgroundColor, '');
       chrome.setThemeColor('black');
       assert.equal(chrome.scrollable.style.backgroundColor, '');

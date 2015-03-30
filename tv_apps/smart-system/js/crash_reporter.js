@@ -1,13 +1,14 @@
 /* -*- Mode: js; js-indent-level: 2; indent-tabs-mode: nil -*- */
 /* vim: set shiftwidth=2 tabstop=2 autoindent cindent expandtab: */
 
+/* global SettingsCache, SystemBanner, focusManager */
+
 'use strict';
 
 // This file calls getElementById without waiting for an onload event, so it
 // must have a defer attribute or be included at the end of the <body>.
 
-var CrashReporter = (function() {
-  var _ = navigator.mozL10n.get;
+window.CrashReporter = (function() {
   var settings = navigator.mozSettings;
   var screen = document.getElementById('screen');
 
@@ -26,9 +27,15 @@ var CrashReporter = (function() {
 
   // This function should only ever be called once.
   function showDialog(crashID, isChrome) {
-    var title = isChrome ? _('crash-dialog-os2') :
-      _('crash-dialog-app', { name: crashedAppName });
-    document.getElementById('crash-dialog-title').textContent = title;
+    var title = isChrome ? {
+      id: 'crash-dialog-os2',
+      args: null
+    } : {
+      id: 'crash-dialog-app',
+      args: { name: crashedAppName }
+    };
+    var crashDialogTitle = document.getElementById('crash-dialog-title');
+    navigator.mozL10n.setAttributes(crashDialogTitle, title.id, title.args);
 
     // "Don't Send Report" button in dialog
     var noButton = document.getElementById('dont-send-report');
@@ -58,12 +65,14 @@ var CrashReporter = (function() {
     var crashInfoLink = document.getElementById('crash-info-link');
     crashInfoLink.addEventListener('click', function onLearnMoreClick() {
       var dialog = document.getElementById('crash-dialog');
-      document.getElementById('crash-reports-header').
-               addEventListener('action', function onAction() {
+      document.getElementById('crash-reports-header')
+              .addEventListener('action', function onAction() {
         this.removeEventListener('click', onAction);
         dialog.classList.remove('learn-more');
+        focusManager.focus();
       });
       dialog.classList.add('learn-more');
+      focusManager.focus();
     });
 
     screen.classList.add('crash-dialog');
@@ -74,16 +83,23 @@ var CrashReporter = (function() {
     screen.classList.remove('crash-dialog');
     var dialog = document.getElementById('crash-dialog');
     dialog.parentNode.removeChild(dialog);
+    focusManager.removeUI(window.CrashReporter);
+    focusManager.focus();
   }
 
   function showBanner(crashID, isChrome) {
-    var message = isChrome ? _('crash-banner-os2') :
-      _('crash-banner-app', { name: crashedAppName });
+    var message = isChrome ? {
+      id: 'crash-banner-os2',
+      args: null
+    } : {
+      id: 'crash-banner-app',
+      args: { name: crashedAppName }
+    };
 
     var button = null;
     if (showReportButton) {
       button = {
-        label: _('crash-banner-report'),
+        labelL10nId: 'crash-banner-report',
         callback: function reportCrash() {
           submitCrash(crashID);
         },
@@ -130,6 +146,7 @@ var CrashReporter = (function() {
         } else {
           showBanner(crashID, isChrome);
         }
+        focusManager.focus();
       });
   }
 
@@ -154,13 +171,53 @@ var CrashReporter = (function() {
     }
   }
 
+  /**
+   * Determine whether there is crash-dialog or system banner focusable.
+   */
+  function isFocusable() {
+    return document.getElementById('crash-dialog') &&
+           screen.classList.contains('crash-dialog');
+  }
+
+  /**
+   * Return parent container of crash report
+   */
+  function getElement() {
+    var dialog = document.getElementById('crash-dialog');
+    if (isFocusable()) {
+      return dialog;
+    }
+  }
+
+  /**
+   * Focus send-report button if dialog is visible. If crash-reports-header is
+   * also visible, focus the actionButton in crash-reports-header
+   */
+  function focus() {
+    var dialog = document.getElementById('crash-dialog');
+    var dialogButton = document.getElementById('send-report');
+    if (isFocusable() && dialogButton) {
+      document.activeElement.blur();
+      if (dialog.classList.contains('learn-more')) {
+        document.getElementById('crash-reports-header').els.actionButton
+          .focus();
+      } else {
+        dialogButton.focus();
+      }
+    }
+  }
+
   window.addEventListener('appcrashed', handleAppCrash);
   window.addEventListener('activitycrashed', handleAppCrash);
   window.addEventListener('homescreencrashed', handleAppCrash);
   window.addEventListener('searchcrashed', handleAppCrash);
 
   return {
-    setAppName: setAppName
+    setAppName: setAppName,
+    isFocusable: isFocusable,
+    getElement: getElement,
+    focus: focus
   };
 })();
+focusManager.addUI(window.CrashReporter);
 

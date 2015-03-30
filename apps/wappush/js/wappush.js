@@ -1,7 +1,7 @@
 /* -*- Mode: js; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- /
 /* vim: set shiftwidth=2 tabstop=2 autoindent cindent expandtab: */
 
-/* global CpScreenHelper, DUMP, Notification, NotificationHelper,
+/* global CpScreenHelper, DUMP, MessageDB, Notification, NotificationHelper,
           ParsedMessage, Promise, SiSlScreenHelper, WhiteList, Utils */
 
 /* exported WapPushManager */
@@ -18,8 +18,7 @@
     close: wpm_close,
     displayWapPushMessage: wpm_displayWapPushMessage,
     onVisibilityChange: wpm_onVisibilityChange,
-    onWapPushReceived: wpm_onWapPushReceived,
-    clearNotifications: wpm_clearNotifications
+    onWapPushReceived: wpm_onWapPushReceived
   };
 
   /** Settings key for enabling/disabling WAP Push messages */
@@ -107,6 +106,8 @@
       CpScreenHelper.init();
 
       // Register event and message handlers only after initialization is done
+      MessageDB.on('messagedeleted', wpm_onMessageDeleted);
+
       document.addEventListener('visibilitychange', wpm_onVisibilityChange);
       window.navigator.mozSetMessageHandler('notification', wpm_onNotification);
       window.navigator.mozSetMessageHandler('wappush-received',
@@ -202,7 +203,6 @@
     var notification = new Notification(title, options);
     notification.addEventListener('click',
       function wpm_onNotificationClick(event) {
-        app.launch();
         wpm_displayWapPushMessage(event.target.tag);
       }
     );
@@ -241,9 +241,19 @@
       }
 
       DUMP('The message was successfully saved to the DB');
-      wpm_sendNotification(message);
-      wpm_finish();
-      return Promise.resolve();
+
+      if (message.action === 'signal-high' ||
+          message.action === 'execute-high')
+      {
+        /* We just decrease the number of pending messages instead of invoking
+         * wpm_finish() since we don't want to start the close procedure. */
+        pendingMessages--;
+        return wpm_displayWapPushMessage(message.timestamp);
+      } else {
+        wpm_sendNotification(message);
+        wpm_finish();
+        return Promise.resolve();
+      }
     }).catch(function wpm_saveRejected(error) {
       console.log('Could not add a message to the database: ' + error + '\n');
       wpm_finish();
@@ -261,13 +271,16 @@
       return;
     }
 
-    /* Clear the close timer when a notification is tapped as the app will soon
-     * become visible */
-    window.clearTimeout(closeTimeout);
-    closeTimeout = null;
-
-    app.launch();
     wpm_displayWapPushMessage(message.tag);
+  }
+
+  /**
+   * Removes the notifications for messages that have been deleted
+   *
+   * @param {Object} message The deleted message.
+   */
+  function wpm_onMessageDeleted(message) {
+    wpm_clearNotifications(+message.timestamp);
   }
 
   /**
@@ -279,6 +292,11 @@
    */
   function wpm_displayWapPushMessage(timestamp) {
     DUMP('Displaying message ' + timestamp);
+
+    // Clear the close timer as the application will soon become visible
+    app.launch();
+    window.clearTimeout(closeTimeout);
+    closeTimeout = null;
 
     return ParsedMessage.load(timestamp).then(
       function wpm_loadResolved(message) {

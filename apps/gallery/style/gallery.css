@@ -1,4 +1,10 @@
-* { -moz-box-sizing: border-box; }
+* { -moz-box-sizing: border-box;
+  /**
+    By default do not allow any user text selection, only enable
+    for certain parts on a per-element/region area
+  */
+    -moz-user-select: none;
+}
 
 html {
   height: 100%;
@@ -35,12 +41,13 @@ section {
   display: none;
 }
 
-#thumbnails-list-top {
-  display: none;
+/* hide sections from screen reader when modal dialogs are showing */
+body.showing-dialog > section {
+  visibility: hidden;
 }
 
 /* All of the main views fill the screen */
-#thumbnail-list-view, #thumbnail-select-view, #fullscreen-view, #pick-view, #edit-view, #crop-view {
+#fullscreen-view, #edit-view, #crop-view, #thumbnail-views {
   position: absolute;
   top: 0;
   left: 0;
@@ -54,13 +61,36 @@ section {
   display: none;
 }
 
-body.thumbnailListView #thumbnail-list-view,
-body.thumbnailSelectView #thumbnail-select-view,
+#thumbnail-views > gaia-header {
+  position: absolute;
+  width: 100%;
+  top: 0;
+}
+
+/* Bug 1111735 - !important is needed because of the shadow CSS polyfill */
+.thumbnails-list, .thumbnails-select, .thumbnails-pick {
+  /* display will be determined by LAYOUT_MODE */
+  display: none !important;
+}
+
+body.thumbnailListView .thumbnails-list,
+body.thumbnailSelectView .thumbnails-select,
+body.pickView .thumbnails-pick {
+  display: block !important;
+}
+
+body.thumbnailListView #thumbnail-views,
+body.thumbnailSelectView #thumbnail-views,
+body.pickView #thumbnail-views,
 body.fullscreenView #fullscreen-view,
-body.pickView #pick-view,
 body.editView #edit-view,
 body.cropView #crop-view {
   display: block;
+}
+
+/* Header in default thumbnail list in tablets only, see gallery_tablet.css */
+body.thumbnailListView #thumbnails-list-top {
+  display: none !important;
 }
 
 /*
@@ -169,6 +199,15 @@ body.pickView #thumbnails {
   top: 5rem;
 }
 
+/*
+ * Give the very last thumbnail a large bottom margin so that it doesn't
+ * hide behind the overlaid toolbar in thumbnail list and select view.
+ */
+body.thumbnailSelectView #thumbnails > li:last-child .thumbnail:last-child,
+body.thumbnailListView #thumbnails > li:last-child .thumbnail:last-child {
+  margin-bottom: 4.5rem;
+}
+
 .thumbnail-group-header {
   font-size: 1.6rem;
   font-weight: 400;
@@ -251,12 +290,9 @@ body.pickView #thumbnails {
   outline-offset: -0.2rem;
 }
 
-/*
- * give the very last thumbnail a large bottom margin so that it doesn't
- * get stuck hidden behind the overlaid toolbar.
- */
-#thumbnails>li:last-child {
-  margin-bottom: 4.5rem;
+/* RTL modifications */
+html[dir=rtl] #thumbnails-number-selected {
+  direction: rtl;
 }
 
 @media (orientation: landscape) {
@@ -289,6 +325,7 @@ body.pickView #thumbnails {
   background: rgba(95, 95, 95, 0.3);
   color: inherit;
   transition: opacity 0.2s linear;
+  z-index: 10;
 }
 
 /**
@@ -630,24 +667,25 @@ footer {
   outline-offset: -0.2rem;
 }
 
-#edit-crop-none {
-  left: 0;
-}
 #edit-crop-aspect-free {
-  left: 20%;
+  left: 0;
   background-image: url('images/iconaction_camera_freecrop_30x30.png');
 }
 #edit-crop-aspect-portrait {
-  left: 40%;
+  left: 20%;
   background-image: url('images/iconaction_camera_crop2x3_30x30.png');
 }
 #edit-crop-aspect-landscape {
-  left: 60%;
+  left: 40%;
   background-image: url('images/iconaction_camera_crop3x2_30x30.png');
 }
 #edit-crop-aspect-square {
-  left: 80%;
+  left: 60%;
   background-image: url('images/iconaction_camera_crop1x1_30x30.png');
+}
+
+#edit-crop-aspect-more {
+  left: 80%;
 }
 
 /* instead of using images inside the buttons above, just draw boxes */
@@ -826,7 +864,7 @@ a.filter-faded {
   position: absolute;
   width: 3.6rem;
   height: 2.6rem;
-  left: calc(3.9rem - 1.8rem);
+  -moz-margin-start: calc(3.9rem - 1.8rem);
   background: url(images/slider-scrubber.png) no-repeat center center;
   font: 0/0 a;
 }
@@ -852,34 +890,38 @@ a.filter-faded {
   font-size: 1.5rem;
 }
 
+html[dir="rtl"] .sliderlabel {
+  background: url(images/slider-marker.png) no-repeat top right;
+}
+
 .sliderlabel:after {
   content: attr(data-label);
   position: relative;
   text-align: center;
   top: 0.9rem;
   width: 1rem;
-  left: calc(-50%  + 0.1rem);
+  -moz-margin-start: calc(-50%  + 0.1rem);
 }
 
 #slider-3 {
-  left: 3.9rem;
+  -moz-margin-start: 3.9rem;
 }
 #slider-2 {
-  left: calc(3.9rem + (100% - 2 * 3.9rem) / 6);
+  -moz-margin-start: calc(3.9rem + (100% - 2 * 3.9rem) / 6);
 }
 #slider-1 {
-  left: calc(3.9rem + (100% - 2 * 3.9rem) * 2 / 6);
+  -moz-margin-start: calc(3.9rem + (100% - 2 * 3.9rem) * 2 / 6);
 }
 #slider0 {
-  left: calc(3.9rem + (100% - 2 * 3.9rem) * 3 / 6);
+  -moz-margin-start: calc(3.9rem + (100% - 2 * 3.9rem) * 3 / 6);
   color: #fff;
 }
 #slider1 {
-  left: calc(3.9rem + (100% - 2 * 3.9rem) * 4 / 6);
+  -moz-margin-start: calc(3.9rem + (100% - 2 * 3.9rem) * 4 / 6);
 }
 #slider2 {
-  left: calc(3.9rem + (100% - 2 * 3.9rem) * 5 / 6);
+  -moz-margin-start: calc(3.9rem + (100% - 2 * 3.9rem) * 5 / 6);
 }
 #slider3 {
-  left: calc(3.9rem + (100% - 2 * 3.9rem));
+  -moz-margin-start: calc(3.9rem + (100% - 2 * 3.9rem));
 }

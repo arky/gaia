@@ -1,8 +1,20 @@
 /* globals ConfirmDialog, Contacts, LazyLoader, utils, ActionMenu,
-   VCardReader */
+   ContactToVcardBlob, VcardFilename, VcardActivityHandler */
 /* exported ActivityHandler */
 
 'use strict';
+
+/**
+ * Per RFC 6350, text/vcard is the canonical MIME media type for vCards, but
+ * there are also deprecated types as well.  Whenever we disambiguate what an
+ * activity is requesting based on its MIME media type, we need to check if it
+ * is any of these, and not just text/vcard.
+ */
+const VCARD_MIME_TYPES = [
+  'text/vcard',
+  'text/x-vcard',
+  'text/directory'
+];
 
 var ActivityHandler = {
   _currentActivity: null,
@@ -10,6 +22,8 @@ var ActivityHandler = {
   _launchedAsInlineActivity: (window.location.search == '?pick'),
 
   mozContactParam: null,
+
+  _actionMenu: null,
 
   get currentlyHandling() {
     return !!this._currentActivity;
@@ -87,19 +101,15 @@ var ActivityHandler = {
   },
 
   handle: function ah_handle(activity) {
-
+    const VCARD_DEPS = '/contacts/js/activities_vcard.js';
     switch (activity.source.name) {
       case 'new':
         this.launch_activity(activity, 'view-contact-form');
         break;
       case 'open':
         if (this.isvCardActivity(activity)) {
-          var self = this;
-          var dependency =
-                         '/shared/js/contacts/import/utilities/vcard_reader.js';
-          LazyLoader.load(dependency, function() {
-            self.getvCardReader(activity.source.data.blob,
-                                           self.readvCard.bind(self, activity));
+          LazyLoader.load(VCARD_DEPS, () => {
+            VcardActivityHandler.handle(activity, this);
           });
         } else {
           this.launch_activity(activity, 'view-contact-details');
@@ -123,67 +133,12 @@ var ActivityHandler = {
 
   },
 
-  renderOneContact: function(contact, activity) {
-    this.mozContactParam = contact;
-    activity.source.data.params = {'mozContactParam': true};
-    this.launch_activity(activity, 'view-contact-form');
-  },
-
-  // This variable has no use once we support vCards with multiple contacts.
-  renderingMultipleContacts: false,
-
-  renderContact: function(contact, activity) {
-    // We don't support importing multiple contacts from vCard activity yet.
-    if (!this.renderingMultipleContacts) {
-      alert(navigator.mozL10n.get('notEnabledYet'));
-      this.launch_activity(activity, 'view-contact-list');
-      this.renderingMultipleContacts = true;
-    }
-  },
-
-  getvCardReader: function ah_getvCardReader(blob, callback) {
-    var fileReader = new FileReader();
-    fileReader.readAsBinaryString(blob);
-    fileReader.onloadend = function() {
-      var reader = new VCardReader(fileReader.result);
-      if(typeof callback === 'function') {
-        callback(reader);
-      }
-    };
-  },
-
-  readvCard: function ah_readvCard(activity, vCardReader) {
-    var firstContact;
-    var firstContactRendered = false;
-    var self = this;
-    var cursor = vCardReader.getAll();
-    cursor.onsuccess = function(event) {
-      var contact = event.target.result;
-      // We check if there is only one contact to know what function
-      // we should call. If not, we render the contacts one by one.
-      if (contact) {
-        if (!firstContact && !firstContactRendered) {
-          firstContact = contact;
-        } else if (!firstContactRendered) {
-          self.renderContact(firstContact, activity);
-          self.renderContact(contact, activity);
-          firstContactRendered = true;
-          firstContact = null;
-        } else {
-          self.renderContact(contact, activity);
-        }
-        cursor.continue();
-      } else if (firstContact) {
-        self.renderOneContact(firstContact, activity);
-      }
-    };
-  },
-
   isvCardActivity: function ah_isvCardActivity(activity) {
     return !!(activity.source &&
               activity.source.data &&
               !activity.source.data.params &&
-              activity.source.data.type === 'text/vcard' &&
+              activity.source.data.type &&
+              VCARD_MIME_TYPES.indexOf(activity.source.data.type) !== -1 &&
               activity.source.data.blob);
   },
 
@@ -219,6 +174,8 @@ var ActivityHandler = {
   dataPickHandler: function ah_dataPickHandler(theContact) {
     var type, dataSet, noDataStr;
     var result = {};
+    var self = this;
+
     // Keeping compatibility with previous implementation. If
     // we want to get the full contact, just pass the parameter
     // 'fullContact' equal true.
@@ -226,6 +183,34 @@ var ActivityHandler = {
         this.activityData.fullContact === true) {
       result = utils.misc.toMozContact(theContact);
       this.postPickSuccess(result);
+      return;
+    }
+
+    // Was this a request for vCard export as a blob?  Check all supported MIME
+    // types.
+    var isVcardDataType = VCARD_MIME_TYPES.some((mime) => {
+      return this.activityDataType.indexOf(mime) !== -1;
+    });
+
+    if (isVcardDataType) {
+      // Normalize the type to text/vcard so other places that check MIME types
+      // (ex: the Facebook guards) experience a consistent MIME type.
+      this._currentActivity.source.data.type = 'text/vcard';
+      LazyLoader.load([
+                       '/shared/js/text_normalizer.js',
+                       '/shared/js/contact2vcard.js',
+                       '/shared/js/setImmediate.js'
+                      ], function lvcard() {
+        ContactToVcardBlob([theContact], function blobReady(vcardBlob) {
+          self.postPickSuccess({
+            name: VcardFilename(theContact),
+            blob: vcardBlob
+          });
+        }, {
+            // Some MMS gateways prefer this MIME type for vcards
+            type: 'text/x-vcard'
+        });
+      });
       return;
     }
 
@@ -292,9 +277,14 @@ var ActivityHandler = {
         break;
       default:
         // if more than one required type of data
-        var self = this;
         LazyLoader.load('/contacts/js/action_menu.js', function() {
-          var prompt1 = new ActionMenu();
+          if (!self._actionMenu) {
+            self._actionMenu = new ActionMenu();
+          } else {
+            // To be sure that the action menu is empty
+            self._actionMenu.hide();
+          }
+
           var itemData;
           var capture = function(itemData) {
             return function() {
@@ -304,14 +294,14 @@ var ActivityHandler = {
               } else {
                 result[type] = itemData;
               }
-              prompt1.hide();
+              self._actionMenu.hide();
               self.postPickSuccess(result);
             };
           };
           for (var i = 0, l = dataSet.length; i < l; i++) {
             itemData = dataSet[i].value;
             var carrier = dataSet[i].carrier || '';
-            prompt1.addToList(
+            self._actionMenu.addToList(
               {
                 id: 'pick_destination',
                 args: {destination: itemData, carrier: carrier}
@@ -319,7 +309,7 @@ var ActivityHandler = {
               capture(itemData)
             );
           }
-          prompt1.show();
+          self._actionMenu.show();
         });
     } // switch
   },

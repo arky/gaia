@@ -33,7 +33,7 @@ suite('controllers/camera', function() {
       notification: {
         display: sinon.spy()
       }
-    }
+    };
 
     // Activity
     this.app.activity = {};
@@ -191,6 +191,63 @@ suite('controllers/camera', function() {
 
       assert.ok(arg.width === 480);
       assert.ok(arg.height === 640);
+    });
+  });
+
+  suite('CameraController#onCaptureKey', function() {
+    test('`keydown:capture` triggers capture', function() {
+      var callback = this.app.on.withArgs('keydown:capture').args[0][1];
+      var event = { preventDefault: sinon.spy() };
+
+      callback(event);
+      sinon.assert.called(this.camera.capture);
+    });
+
+    test('It calls preventDefault if the capture call doesn\'t return false', function() {
+      var callback = this.app.on.withArgs('keydown:capture').args[0][1];
+      var event = { preventDefault: sinon.spy() };
+
+      this.camera.capture.returns(false);
+      callback(event);
+      sinon.assert.notCalled(event.preventDefault);
+
+      this.camera.capture.returns(undefined);
+      callback(event);
+      sinon.assert.called(event.preventDefault);
+    });
+
+    test('It doesnt capture if timer is active', function() {
+      this.app.get.withArgs('timerActive').returns(true);
+      var callback = this.app.on.withArgs('keydown:capture').args[0][1];
+      var event = { preventDefault: sinon.spy() };
+
+      callback(event);
+      sinon.assert.notCalled(this.camera.capture);
+    });
+
+    test('It doesnt capture if confirm overlay is shown', function() {
+      this.app.get.withArgs('confirmViewVisible').returns(true);
+      var callback = this.app.on.withArgs('keydown:capture').args[0][1];
+      var event = { preventDefault: sinon.spy() };
+
+      callback(event);
+      sinon.assert.notCalled(this.camera.capture);
+    });
+  });
+
+  suite('CameraController#onFocusKey', function() {
+    setup(function() {
+      this.camera.focus = {
+        focus: this.sinon.spy()
+      };
+    });
+
+    test('`keydown:focus` triggers focus', function() {
+      var callback = this.app.on.withArgs('keydown:focus').args[0][1];
+      var event = { preventDefault: sinon.spy() };
+
+      callback(event);
+      sinon.assert.called(this.camera.focus.focus);
     });
   });
 

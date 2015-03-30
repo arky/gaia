@@ -7,10 +7,10 @@
     <title>Dialer</title>
 
     <!-- Localization -->
-    <link rel="manifest" href="../manifest.webapp">
+    <meta name="defaultLanguage" content="en-US">
+    <meta name="availableLanguages" content="en-US">
     <link rel="localization" href="locales/dialer.{locale}.properties">
     <link rel="localization" href="locales/shared.{locale}.properties">
-    <link rel="localization" href="../contacts/locales/contacts.{locale}.properties">
     <link rel="localization" href="/shared/locales/date/date.{locale}.properties">
     <link rel="localization" href="/shared/locales/voicemail/voicemail.{locale}.properties">
     <link rel="localization" href="/shared/locales/keypad/keypad.{locale}.properties">
@@ -37,9 +37,10 @@
     <link rel="stylesheet" type="text/css" href="/shared/style/option_menu.css">
 
     <!-- JS -->
+    <script defer src="/shared/js/l10n.js"></script>
+    <script defer src="/shared/js/l10n_date.js"></script>
     <script defer src="/shared/js/lazy_loader.js"></script>
     <script defer src="/shared/js/font_size_utils.js"></script>
-    <script defer src="/shared/js/lazy_l10n.js"></script>
     <script defer src="/dialer/js/index.js"></script>
 
     <script defer src="/shared/js/dialer/utils.js"></script>
@@ -74,8 +75,6 @@
     <script defer src="/shared/js/accessibility_helper.js"></script>
     <script defer src="/shared/js/async_storage.js"></script>
     <script defer src="/shared/js/component_utils.js"></script>
-    <script defer src="/shared/js/l10n.js"></script>
-    <script defer src="/shared/js/l10n_date.js"></script>
     <script defer src="/shared/js/mobile_operator.js"></script>
     <script defer src="/shared/js/notification_helper.js"></script>
     <script defer src="/shared/js/option_menu.js"></script>
@@ -167,7 +166,7 @@
         <div id="keypad-panel" role="tabpanel" class="bb-tabpanel" aria-labelledby="option-keypad">
           <div id="phone-number-view-container" dir="ltr">
             <div class="phone-number-view-wrapper-input">
-              <input id="phone-number-view" type="text" class="phone-number-font font-light" readonly="readonly" data-l10n-id="phoneNumberInput">
+              <input id="phone-number-view" type="text" class="phone-number-font font-light textfield" readonly="readonly" data-l10n-id="phoneNumberInput">
             </div>
             <button id="keypad-delete" class="reset-button" data-value="delete" data-l10n-id="keypadDelete">
             </button>
@@ -236,7 +235,7 @@
               </div>
             </section>
             <section id="keypad-callbar">
-              <button id="keypad-callbar-add-contact" data-value="add-contact" class="reset-button keypad-callbar-button icon-add-contact" data-l10n-id="dialerAddContact" disabled></button>
+              <button id="keypad-callbar-add-contact" data-value="add-contact" class="reset-button keypad-callbar-button icon-add-contact disable-when-dialog-animates" data-l10n-id="dialerAddContact" disabled></button>
               <button id="keypad-callbar-call-action" class="reset-button" data-value="make-call" data-l10n-id="makeCall">
                 <div class="js-sim-indication"></div>
               </button>
@@ -273,7 +272,7 @@
       </section>
       <form id="response" role="region">
         <p>
-          <input id="response-text" type="text" data-l10n-id="type-your-response" placeholder="Type your selection..." dir="auto" required disabled>
+          <input id="response-text" type="text" data-l10n-id="type-your-response" placeholder="Type your selection..." required disabled>
           <button id="response-text-reset" type="reset" data-l10n-id="clear-all-text"> Clear-all-text </button>
         </p>
       </form>

@@ -10,7 +10,6 @@
   "permissions": {
     "themeable":{},
     "sms":{},
-    "storage":{},
     "mobileconnection":{},
     "alarms":{},
     "contacts":{ "access": "readonly" },
@@ -61,7 +60,7 @@
     "share": {
       "href": "/index.html#activity-share",
       "filters": {
-        "type": ["image/*", "audio/*", "video/*", "url"],
+        "type": ["image/*", "audio/*", "video/*", "url", "text/vcard"],
         "number": {
           "max": 5
         }
@@ -73,7 +72,7 @@
   "messages": [
      { "alarm": "/index.html" },
      { "sms-received": "/index.html" },
-     { "notification": "/index.html" }
+     { "notification": "/index.html#notification" }
   ],
   "connections": {
     "costcontrolSmsQuery": {

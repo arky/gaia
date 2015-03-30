@@ -56,6 +56,14 @@ var FLAVORS = {
       main: 'contact-suggestion-tmpl',
       photo: 'contact-photo-tmpl'
     }
+  },
+  'report-view': {
+    renderAll: false,
+    shouldHighlight: false,
+    templates: {
+      main: 'contact-report-tmpl',
+      photo: 'contact-photo-tmpl'
+    }
   }
 };
 
@@ -256,7 +264,7 @@ ContactRenderer.prototype = {
         carrier: data.carrier
       }, {
         safe: ['number']
-      });
+      }).toString();
 
       // Render contact photo only for specific flavor
       data.photoHTML = renderPhoto && details.photoURL ?

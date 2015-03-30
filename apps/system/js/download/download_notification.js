@@ -13,11 +13,17 @@ function DownloadNotification(download) {
   this.state = 'started';
   this.id = DownloadFormatter.getUUID(download);
 
-  NotificationScreen.addNotification(this._getInfo());
-
   // We have to listen for state changes
   this.listener = this._update.bind(this);
   this.download.addEventListener('statechange', this.listener);
+
+  if (download.state === 'started') {
+    NotificationScreen.addNotification(this._getInfo());
+  } else {
+    // For adopted downloads, it is possible for the download to already be
+    // completed.
+    this._update();
+  }
 }
 
 DownloadNotification.prototype = {
@@ -41,8 +47,9 @@ DownloadNotification.prototype = {
    */
   _update: function dn_update() {
     if (this.download.state === 'finalized') {
-      // In theory we should never see this, but, we know that if we were
-      // to see this we want to do nothing.
+      // If the user delete the file, we will see this state and what we have to
+      // do, is to remove the notification
+      this._close();
       return;
     }
     var noNotify = this._wontNotify();

@@ -8,5 +8,9 @@
 var MockNavigation = {
   init: function() {},
   isCurrentPanel: function() {},
-  toPanel: function() { return Promise.resolve(); }
+  ensureCurrentPanel: () => Promise.resolve(),
+  toPanel: function() { return Promise.resolve(); },
+  getPanelName: () => '',
+  on: () => {},
+  off: () => {}
 };

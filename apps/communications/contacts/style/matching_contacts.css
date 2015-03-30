@@ -25,7 +25,7 @@
 
 #contacts-list-container > ol > li[data-uuid] {
   display: block;
-  padding-left: 4rem;
+  -moz-padding-start: 4rem;
   border-top: none !important;
 }
 
@@ -50,11 +50,12 @@
   pointer-events: auto;
 }
 
-li p.match-main-reason {
+.match-main-reason {
   color: #008eab;
+  font-size: 1.5rem;
 }
 
-li[aria-disabled="true"] p.match-main-reason {
+li[aria-disabled="true"] .match-main-reason {
   color: #5b5b5b;
 }
 
@@ -111,4 +112,11 @@ form[role="dialog"][data-type="edit"] #main {
 
 [data-type="list"] li[data-visited="true"] aside img {
   border-style: solid;
+}
+
+/* RTL View */
+
+html[dir="rtl"] #contacts-list-container label {
+  left: unset;
+  right: 0;
 }

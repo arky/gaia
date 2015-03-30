@@ -2,7 +2,7 @@
 /*global define, console, FontSizeUtils, requestAnimationFrame */
 'use strict';
 
-define(function(require) {
+define(function(require, exports, module) {
 
 var msgHeaderItemNode = require('tmpl!./msg/header_item.html'),
     deleteConfirmMsgNode = require('tmpl!./msg/delete_confirm.html'),
@@ -187,6 +187,7 @@ return [
 
       this.editMode = false;
       this.selectedMessages = null;
+      this.isFirstTimeVisible = true;
 
       this.curFolder = null;
       this.isIncomingFolder = true;
@@ -380,9 +381,6 @@ return [
       // be smaller which messes up our logic a bit.  We trigger metric
       // gathering in non-search cases too for consistency.
       this.vScroll.captureScreenMetrics();
-      if (this.mode === 'search') {
-        this.searchInput.focus();
-      }
     },
 
     onSearchButton: function() {
@@ -443,11 +441,6 @@ return [
         this.messagesContainer.classList.add('show-edit');
 
         this.selectedMessages = [];
-        var cbs = this.messagesContainer
-                  .querySelectorAll('input[type=checkbox]');
-        for (i = 0; i < cbs.length; i++) {
-          cbs[i].checked = false;
-        }
         this.selectedMessagesUpdated();
       }
       else {
@@ -461,16 +454,14 @@ return [
         this.editToolbar.classList.add('collapsed');
         this.messagesContainer.classList.remove('show-edit');
 
-        // (Do this based on the DOM nodes actually present; if the user has
-        // been scrolling a lot, this.selectedMessages may contain messages that
-        // no longer have a domNode around.)
-        var selectedMsgNodes =
-          this.getElementsByClassName('msg-header-item-selected');
-        for (i = selectedMsgNodes.length - 1; i >= 0; i--) {
-          selectedMsgNodes[i].classList.remove('msg-header-item-selected');
-        }
-
         this.selectedMessages = null;
+      }
+
+      // Reset checked mode for all message items.
+      var msgNodes = this.messagesContainer.querySelectorAll(
+        '.msg-header-item');
+      for (i = 0; i < msgNodes.length; i++) {
+        this.setMessageChecked(msgNodes[i], false);
       }
 
       // UXXX do we want to disable the buttons if nothing is selected?
@@ -515,11 +506,16 @@ return [
       // Unstar if everything is starred, otherwise star
       this.setAsStarred = !(numStarred && numStarred ===
                             this.selectedMessages.length);
+      mozL10n.setAttributes(this.starBtn,
+        this.setAsStarred ? 'message-star-button' : 'message-unstar-button');
+
       // Mark read if everything is unread, otherwise unread
       this.setAsRead = (hasMessages && numRead === 0);
 
       // Update mark read/unread button to show what action will be taken.
       this.readBtn.classList.toggle('unread', numRead > 0);
+      mozL10n.setAttributes(this.readBtn, numRead > 0 ?
+        'message-mark-unread-button' : 'message-mark-read-button');
 
       // Update disabled state based on if there are selected messages
       this.toolbarEditButtonNames.forEach(function(key) {
@@ -654,7 +650,7 @@ return [
 
       this.folderNameNode.textContent = folder.name;
       this.updateUnread(folder.unread);
-
+      this.messagesContainer.setAttribute('aria-label', folder.name);
       this.hideEmptyLayout();
 
       // You can't refresh messages in the localdrafts folder.
@@ -691,11 +687,6 @@ return [
       this.vScroll.clearDisplay();
       this.curPhrase = phrase;
       this.curFilter = filter;
-
-      if (phrase.length < 1) {
-        this.showEmptyLayout();
-        return false;
-      }
 
       // We are creating a new slice, so any pending snippet requests are moot.
       this._snippetRequestPending = false;
@@ -758,12 +749,40 @@ return [
       cards.removeCardAndSuccessors(this, 'animate');
     },
 
+    onClearSearch: function() {
+      this.showSearch('', this.curFilter);
+    },
+
     onGetMoreMessages: function() {
       if (!headerCursor.messagesSlice) {
         return;
       }
 
+      // For accessibility purposes, focus on the first newly loaded item in the
+      // messages list. This will ensure that screen reader's cursor position
+      // will get updated to the right place.
+      this.vScroll.once('recalculated', function(calledFromTop, refIndex) {
+        // refIndex is the index of the first new message item.
+        this.messagesContainer.querySelector(
+          '[data-index="' + refIndex + '"]').focus();
+      }.bind(this));
+
       headerCursor.messagesSlice.requestGrowth(1, true);
+    },
+
+    /**
+     * Set the refresh button state based on the new message status.
+     */
+    setRefreshState: function(syncing) {
+      if (syncing) {
+          this.refreshBtn.dataset.state = 'synchronizing';
+          this.refreshBtn.setAttribute('role', 'progressbar');
+          mozL10n.setAttributes(this.refreshBtn, 'messages-refresh-progress');
+      } else {
+        this.refreshBtn.dataset.state = 'synchronized';
+        this.refreshBtn.removeAttribute('role');
+        mozL10n.setAttributes(this.refreshBtn, 'messages-refresh-button');
+      }
     },
 
     // The funny name because it is auto-bound as a listener for
@@ -787,8 +806,7 @@ return [
           this.syncingNode.classList.remove('collapsed');
           this.syncMoreNode.classList.add('collapsed');
           this.hideEmptyLayout();
-
-          this.refreshBtn.dataset.state = 'synchronizing';
+          this.setRefreshState(true);
       } else if (newStatus === 'syncfailed' ||
                  newStatus === 'synced') {
         if (newStatus === 'syncfailed') {
@@ -800,7 +818,7 @@ return [
             text: mozL10n.get('toaster-retryable-syncfailed')
           });
         }
-        this.refreshBtn.dataset.state = 'synchronized';
+        this.setRefreshState(false);
         this.syncingNode.classList.add('collapsed');
         this._manuallyTriggeredSync = false;
       }
@@ -1084,7 +1102,10 @@ return [
         return;
       }
 
-      var cacheNode = this.cloneNode(true);
+      // Safely clone the node so we can mutate the tree to cut out the parts
+      // we do not want/need.
+      var cacheNode =
+            htmlCache.cloneAsInertNodeAvoidingCustomElementHorrors(this);
       cacheNode.dataset.cached = 'cached';
 
       // Make sure toolbar is visible, could be hidden by drawer
@@ -1120,7 +1141,7 @@ return [
         this._cacheListLimit
       );
 
-      htmlCache.saveFromNode(cacheNode);
+      htmlCache.saveFromNode(module.id, cacheNode);
     },
 
     /**
@@ -1389,11 +1410,15 @@ return [
       syncNode.classList.toggle('msg-header-syncing-section-error',
                                 sendState === 'error');
 
-      // edit mode select state
-      if (this.editMode) {
-        var checkbox = msgNode.querySelector('input[type=checkbox]');
-        checkbox.checked = this.selectedMessages.indexOf(message) !== -1;
+      // Set the accessible label for the syncNode.
+      if (sendState) {
+        mozL10n.setAttributes(syncNode, 'message-header-state-' + sendState);
+      } else {
+        syncNode.removeAttribute('data-l10n-id');
       }
+
+      // edit mode select state
+      this.setSelectState(msgNode, message);
     },
 
     updateMatchedMessageDom: function(firstTime, matchedHeader) {
@@ -1464,13 +1489,8 @@ return [
         snippetNode.classList.toggle('icon-short', message.hasAttachments);
       }
 
-      // unread (we use very specific classes directly on the nodes rather than
-      // child selectors for hypothetical speed)
-      var unreadNode =
-        msgNode.querySelector('.msg-header-unread-section');
-      unreadNode.classList.toggle('msg-header-unread-section-unread',
-                                  !message.isRead);
-      dateNode.classList.toggle('msg-header-date-unread', !message.isRead);
+      // Set unread state.
+      msgNode.classList.toggle('unread', !message.isRead);
 
       // star
       var starNode = msgNode.querySelector('.msg-header-star');
@@ -1479,10 +1499,29 @@ return [
       subjectNode.classList.toggle('icon-short', message.isStarred);
 
       // edit mode select state
+      this.setSelectState(msgNode, message);
+    },
+
+    /**
+     * Set or unset the select state based on the edit mode.
+     */
+    setSelectState: function(msgNode, message) {
       if (this.editMode) {
-        var checkbox = msgNode.querySelector('input[type=checkbox]');
-        checkbox.checked = this.selectedMessages.indexOf(message) !== -1;
+        this.setMessageChecked(msgNode,
+          this.selectedMessages.indexOf(message) !== -1);
+      } else {
+        msgNode.removeAttribute('aria-selected');
       }
+    },
+
+    /**
+     * Set the checked state for the message item in the list. It sets both
+     * checkbox checked and aria-selected states.
+     */
+    setMessageChecked: function(msgNode, checked) {
+      var checkbox = msgNode.querySelector('input[type=checkbox]');
+      checkbox.checked = checked;
+      msgNode.setAttribute('aria-selected', checked);
     },
 
     /**
@@ -1538,6 +1577,16 @@ return [
         fn();
       }
 
+      // First time this card is visible, want the search field focused if this
+      // is a search. Do not want to do it on every cardVisible, as the user
+      // could be scrolled/have their own place in the search results, and are
+      // likely going back and forth between this card and message_reader.
+      if (this.mode === 'search' && this.isFirstTimeVisible) {
+        this.searchInput.focus();
+      }
+
+      this.isFirstTimeVisible = false;
+
       // In case the vScroll was initialized when the card was not visible, like
       // in an activity/notification flow when this card is created in the
       // background behind the compose/reader card, let it know it is visible
@@ -1566,15 +1615,13 @@ return [
 
       if (this.editMode) {
         var idx = this.selectedMessages.indexOf(header);
-        var cb = messageNode.querySelector('input[type=checkbox]');
         if (idx !== -1) {
           this.selectedMessages.splice(idx, 1);
-          cb.checked = false;
         }
         else {
           this.selectedMessages.push(header);
-          cb.checked = true;
         }
+        this.setMessageChecked(messageNode, idx === -1);
         this.selectedMessagesUpdated();
         return;
       }
@@ -1632,7 +1679,7 @@ return [
         headerCursor.setCurrentMessage(header);
       } else if (messageNode.dataset.id) {
         // a case where header was not set yet, like clicking on a
-        // cookie cached node, or virtual scroll item that is no
+        // html cached node, or virtual scroll item that is no
         // longer backed by a header.
         headerCursor.setCurrentMessageBySuid(messageNode.dataset.id);
       } else {
@@ -1759,12 +1806,10 @@ return [
         }
 
         this.editBtn.disabled = true;
-        this.refreshBtn.dataset.state = 'synchronizing';
       } else {
         // After sync, the edit button should remain disabled only if
         // the list is empty.
         this.editBtn.disabled = this.isEmpty();
-        this.refreshBtn.dataset.state = 'synchronized';
 
         // Similarly, we must stop the refresh icons for each message
         // from rotating further. For instance, if we are offline, we
@@ -1774,6 +1819,7 @@ return [
           items[i].classList.remove('msg-header-syncing-section-syncing');
         }
       }
+      this.setRefreshState(syncing);
     },
 
     onRefresh: function() {

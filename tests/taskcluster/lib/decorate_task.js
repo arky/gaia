@@ -53,30 +53,37 @@ function decorateTask(task, options) {
     output[key] = task[key];
   }
 
-  // Each task must have its own unique task id.
-  output.taskId = output.taskId || slugid.v4();
+  // Each task must have its own unique task id unless this is an
+  // external hook. In the external case we expect
+  // external systems to generate a taskId.
+  if (!options.externalHook) {
+    output.taskId = output.taskId || slugid.v4();
+  }
 
   // Taskcluster needs to know how to run the tasks these specify which
   // provisioning method and which worker type to run on.
-  output.task.created = new Date().toJSON();
+  if (!options.externalHook) {
+    output.task.created = new Date().toJSON();
+  }
   output.task.metadata.source = 'http://todo.com/soon';
 
   // Ensure we are always using the correct scheduler so our tasks are routed
   // correctly...
-  output.task.schedulerId = output.task.schedulerId || 'task-graph-scheduler';
+  output.task.schedulerId = output.task.schedulerId || options.schedulerId ||
+    'task-graph-scheduler';
+  output.task.metadata.owner = 'dev-gaia@lists.mozilla.org';
 
-  // XXX: Should not be jlal@mozilla.com in all cases =p
-  output.task.metadata.owner = 'jlal@mozilla.com';
-
-  // Expire all tasks in 24 hours...
-  var deadline = new Date();
-  deadline.setHours(deadline.getHours() + 24);
-  output.task.deadline = deadline.toJSON();
+  // Expire all tasks in 24 hours.
+  if (!options.externalHook) {
+    var deadline = new Date();
+    deadline.setHours(deadline.getHours() + 24);
+    output.task.deadline = deadline.toJSON();
+  }
 
   // Default docker image...
   var payload = output.task.payload;
   payload.image = payload.image || (IMAGE.trim()) + ':' + (VERSION.trim());
-  payload.maxRunTime = 30 * 60; // 30 minutes in seconds...
+  payload.maxRunTime = payload.maxRunTime || 30 * 60; // 30 minutes in seconds
 
   // Copy over the important environment variables...
   payload.env = payload.env || {};
@@ -84,10 +91,14 @@ function decorateTask(task, options) {
     payload.env[env] = payload.env[env] || process.env[env];
   });
 
+  output.task.scopes = output.task.scopes || [];
+  // Hack to ensure all tasks have the scope for the given image.
+  output.task.scopes.push('docker-worker:image:' + IMAGE + '*');
+
   if (process.env.TREEHERDER_PROJECT && process.env.TREEHERDER_REVISION) {
     output.task.routes = output.task.routes || [];
     output.task.routes.push(
-      'treeherder.' +
+      'tc-treeherder.' +
       process.env.TREEHERDER_PROJECT + '.' +
       process.env.TREEHERDER_REVISION
     );

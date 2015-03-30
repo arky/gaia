@@ -15,6 +15,7 @@ var cmpAttachmentItemNode = require('tmpl!./cmp/attachment_item.html'),
     cmpInvalidAddressesNode = require('tmpl!./cmp/invalid_addresses.html'),
     msgAttachConfirmNode = require('tmpl!./msg/attach_confirm.html'),
     evt = require('evt'),
+    htmlCache = require('html_cache'),
     toaster = require('toaster'),
     model = require('model'),
     iframeShims = require('iframe_shims'),
@@ -67,6 +68,10 @@ return [
   require('./editor_mixins'),
   {
     createdCallback: function() {
+      // Save a cached version before anything is changed on the pristine
+      // template state.
+      htmlCache.cloneAndSave(module.id, this);
+
       this.sending = false;
 
       // Management of attachment work, to limit memory use
@@ -674,15 +679,8 @@ return [
      * will update the UI as a side-effect; you do not need to do it.
      */
     addAttachmentsSubjectToSizeLimits: function(toAttach) {
-      var totalSize = 0;
       // Tally the size of the already-attached attachments.
-      if (this.composer.attachments) {
-        // Using a for loop to avoid any closures that may capture
-        // the large attachments.
-        for (var i = 0; i < this.composer.attachments.length; i++) {
-          totalSize += this.composer.attachments[i].blob.size;
-        }
-      }
+      var totalSize = this.calculateTotalAttachmentsSize();
 
       // Keep attaching until we find one that puts us over the limit.  Then
       // generate an error whose plurality is based on the number of attachments
@@ -749,6 +747,30 @@ return [
       else {
         this.attachmentsContainer.classList.add('collapsed');
       }
+      this.updateAttachmentsAriaLabel();
+    },
+
+    /**
+     * Update the label used for accessibility that describes the attachments
+     * included.
+     */
+    updateAttachmentsAriaLabel: function() {
+      // Only include total size in KB if there is more than 1 attachment.
+      var kilobytes = this.composer.attachments.length > 1 ?
+        Math.ceil(this.calculateTotalAttachmentsSize() / 1024) : 0;
+      mozL10n.setAttributes(this.attachmentsContainer,
+        'compose-attachments-container', { kilobytes: kilobytes });
+    },
+
+    /**
+     * Calculate the total size of all attachments included.
+     */
+    calculateTotalAttachmentsSize: function() {
+      var totalSize = 0;
+      for (var i = 0; i < this.composer.attachments.length; i++) {
+        totalSize += this.composer.attachments[i].blob.size;
+      }
+      return totalSize;
     },
 
     /**
@@ -767,12 +789,8 @@ return [
         this.attachmentsContainer.classList.add('collapsed');
       }
       else {
-        var totalSize = 0;
-        for (var i = 0; i < this.composer.attachments.length; i++) {
-          totalSize += this.composer.attachments[i].blob.size;
-        }
-
-        fileDisplay.fileSize(this.attachmentsSize, totalSize);
+        fileDisplay.fileSize(this.attachmentsSize,
+          this.calculateTotalAttachmentsSize());
       }
 
       // Only display the total size when the number of attachments is more
@@ -788,6 +806,7 @@ return [
       node.parentNode.removeChild(node);
       this.composer.removeAttachment(attachment);
 
+      this.updateAttachmentsAriaLabel();
       this.updateAttachmentsSize();
     },
 
@@ -999,7 +1018,8 @@ return [
         var activity = new MozActivity({
           name: 'pick',
           data: {
-            type: ['image/*', 'video/*', 'audio/*', 'application/*'],
+            type: ['image/*', 'video/*', 'audio/*', 'application/*',
+                   'text/vcard'],
             nocrop: true
           }
         });

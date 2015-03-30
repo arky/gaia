@@ -15,18 +15,28 @@
     SYSTEM_ONLY_KEYS: Object.freeze([
       'power',
       'home',
+      'mozhomescreen',
       'exit'
     ]),
     APP_CANCELLED_KEYS: Object.freeze([
       'volumeup',
-      'volumedown'
+      'volumedown',
+      'camera'
+    ]),
+    // Home key has different .key values on different devices.
+    HOME_KEY_ALIAS: Object.freeze([
+      'home',
+      'mozhomescreen',
+      'exit'
     ]),
     TRANSLATION_TABLE: Object.freeze({
       'power': 'sleep-button',
       'exit': 'home-button',
       'home': 'home-button',
+      'mozhomescreen': 'home-button',
       'volumeup': 'volume-up-button',
-      'volumedown': 'volume-down-button'
+      'volumedown': 'volume-down-button',
+      'camera': 'camera-button'
     }),
     _getLowerCaseKeyName: function bkem_getLowerCaseKeyName(event) {
       return event.key && event.key.toLowerCase();
@@ -79,7 +89,7 @@
     },
     isHomeKey: function bkem_isHomeKey(event) {
       var key = this._getLowerCaseKeyName(event);
-      return key === 'exit' || key === 'home';
+      return (this.HOME_KEY_ALIAS.indexOf(key) > -1);
     },
     isHardwareKeyEvent: function bkem_isHardwareKeyEvent(type) {
       return (this.KEY_EVENTS.indexOf(type) > -1);

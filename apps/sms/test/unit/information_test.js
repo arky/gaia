@@ -62,6 +62,7 @@ suite('Information view', function() {
     loadBodyHTML('/index.html');
     this.sinon.spy(navigator.mozL10n, 'setAttributes');
     this.sinon.stub(MessageManager, 'on');
+    this.sinon.spy(ThreadUI, 'setHeaderContent');
     contact = MockContact();
   });
 
@@ -72,24 +73,18 @@ suite('Information view', function() {
 
     suite('view show/reset status', function() {
       test('view status before show method', function() {
-        assert.isFalse(reportView.parent.classList.contains(
-          reportView.name + '-information'));
-        assert.isTrue(reportView.container.classList.contains('hide'));
+        assert.isTrue(reportView.panel.classList.contains('hide'));
       });
 
       test('view status after show method', function() {
         this.sinon.stub(reportView, 'render');
         reportView.show();
-        assert.isTrue(reportView.parent.classList.contains(
-          reportView.name + '-information'));
-        assert.isFalse(reportView.container.classList.contains('hide'));
+        assert.isFalse(reportView.panel.classList.contains('hide'));
       });
 
       test('view status after reset method', function() {
         reportView.reset();
-        assert.isFalse(reportView.parent.classList.contains(
-          reportView.name + '-information'));
-        assert.isTrue(reportView.container.classList.contains('hide'));
+        assert.isTrue(reportView.panel.classList.contains('hide'));
       });
     });
 
@@ -114,14 +109,20 @@ suite('Information view', function() {
       setup(function() {
         reportView.reset();
         this.sinon.spy(ContactRenderer.prototype, 'render');
+        this.sinon.spy(ContactRenderer, 'flavor');
       });
+
       test('renderContactList with string array', function() {
         var participants = ['111'];
         reportView.renderContactList(participants);
-        assert.isTrue(ContactRenderer.prototype.render.called);
-        var arg = ContactRenderer.prototype.render.args[0][0];
-        assert.equal(arg.input, participants[0]);
-        assert.equal(arg.infoBlock, null);
+        sinon.assert.calledWith(ContactRenderer.flavor, 'report-view');
+        sinon.assert.calledWithMatch(
+          ContactRenderer.prototype.render,
+          {
+            input: participants[0],
+            infoBlock: undefined
+          }
+        );
       });
 
       test('renderContactList with string array(not in contact)', function() {
@@ -144,10 +145,14 @@ suite('Information view', function() {
           { number: '222', infoBlock: div}
         ];
         reportView.renderContactList(participants);
-        sinon.assert.called(ContactRenderer.prototype.render);
-        var arg = ContactRenderer.prototype.render.args[0][0];
-        assert.equal(arg.input, participants[0].number);
-        assert.equal(arg.infoBlock, participants[0].infoBlock);
+        sinon.assert.calledWith(ContactRenderer.flavor, 'report-view');
+        sinon.assert.calledWithMatch(
+          ContactRenderer.prototype.render,
+          {
+            input: participants[0].number,
+            infoBlock: div
+          }
+        );
       });
 
       test('renderContactList with object array(not in contact)', function() {
@@ -183,7 +188,7 @@ suite('Information view', function() {
           ];
 
           this.sinon.spy(Template.prototype, 'interpolate');
-          this.sinon.stub(Contacts, 'findByAddress');        
+          this.sinon.stub(Contacts, 'findByAddress');
 
           reportView.renderContactList(oldParticipant);
           oldRenderingId = reportView.renderingId;
@@ -269,7 +274,9 @@ suite('Information view', function() {
     });
 
     function getInfoBlock(renderContactList) {
-      return renderContactList.args[0][0][0].infoBlock;
+      var infoBlock = renderContactList.args[0][0][0].infoBlock;
+      assert.isTrue(infoBlock.classList.contains('network-status'));
+      return infoBlock;
     }
 
     function generalInfoAssertion(opts) {
@@ -292,7 +299,7 @@ suite('Information view', function() {
       assert.equal(reportView.subject.classList.contains('hide'), subjectHide);
       if (!subjectHide && subjectContent) {
         assert.equal(reportView.subject.querySelector('.detail').textContent,
-                     subjectContent);        
+                     subjectContent);
       }
 
       if (delivery === 'error') {
@@ -1058,7 +1065,8 @@ suite('Information view', function() {
       });
       groupView = new Information('group');
       this.sinon.spy(groupView, 'renderContactList');
-      this.sinon.spy(ThreadUI, 'setHeaderContent');
+      this.sinon.spy(ContactRenderer, 'flavor');
+
       groupView.render();
     });
 
@@ -1068,9 +1076,10 @@ suite('Information view', function() {
     test('view status before show method', function() {
       sinon.assert.calledWith(groupView.renderContactList, participants);
       sinon.assert.calledWithMatch(
-        ThreadUI.setHeaderContent,
-        { id: 'participant', args: { n: participants.length } }
+        navigator.mozL10n.setAttributes,
+        groupView.headerText, 'participant', { n:participants.length }
       );
+      sinon.assert.calledWith(ContactRenderer.flavor, 'group-view');
     });
   });
 

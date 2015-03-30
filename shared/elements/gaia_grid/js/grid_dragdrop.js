@@ -1,4 +1,5 @@
 'use strict';
+/* global devicePixelRatio */
 /* global GaiaGrid */
 
 (function(exports) {
@@ -6,6 +7,16 @@
   const ACTIVE_SCALE = 1.4;
 
   const COLLECTION_DROP_SCALE = 0.5;
+
+  /* This is an alternative delay used to initiate icon movement when in edit
+   * mode. The normal contextmenu delay is too long once we're in edit mode
+   * and causes user confusion, but a short delay globally would cause too many
+   * accidental triggers of edit mode.
+   */
+  const EDIT_LONG_PRESS_DELAY = 200;
+
+  /* The movement threshold to use for the above synthetic long-press. */
+  const EDIT_LONG_PRESS_THRESHOLD = 4 * devicePixelRatio;
 
   /* This delay is the time passed once users stop the finger over an icon and
    * the rearrange is performed */
@@ -17,6 +28,19 @@
 
   /* This delay is the time to wait before rearranging a collection. */
   const REARRANGE_COLLECTION_DELAY = 500;
+
+  /* This is the delay before calling finish when handling touchend. */
+  const TOUCH_END_FINISH_DELAY = 20;
+
+  /* The maximum frequency with which the grid will be rearranged in response
+   * to the item position changing, in ms.
+   */
+  const REARRANGE_FREQUENCY = 100;
+
+  /* The amount of cool-down time after a rearrange animation. To avoid
+   * rearranging too frequently and causing jank and user confusion.
+   */
+  const REARRANGE_COOLDOWN = 750;
 
   const SCREEN_HEIGHT = window.innerHeight;
 
@@ -30,6 +54,10 @@
     this.container = gridView.element;
     this.scrollable = document.documentElement;
     this.container.addEventListener('touchstart', this);
+    this.container.addEventListener('touchmove', this);
+    this.container.addEventListener('touchend', this);
+    window.addEventListener('touchcancel', this);
+    this.container.addEventListener('click', this);
     this.container.addEventListener('contextmenu', this);
   }
 
@@ -40,6 +68,16 @@
      * @type {DomElement}
      */
     target: null,
+
+    /**
+     * The edit-mode long-press timeout
+     */
+    longPressTimeout: null,
+
+    /**
+     * The position of the first touchstart of the current event block
+     */
+    touchStart: { x: 0, y: 0, screenX: 0, screenY: 0 },
 
     /**
      * If we have moved an icon, this indicates that we need to save the state
@@ -77,6 +115,16 @@
     editHeaderElement: null,
 
     /**
+     * The timeout used to rearrange the grid during dragging.
+     */
+    rearrangeGridTimeout: null,
+
+    /**
+     * The time of the last reposition call.
+     */
+    lastRepositionTime: 0,
+
+    /**
      * Returns the maximum active scale value.
      */
     get activeScale() {
@@ -88,6 +136,13 @@
      */
     get inDragAction() {
       return this.target && this.target.classList.contains('active');
+    },
+
+    /**
+     * Returns the delay before calling finish in response to a touch-end event.
+     */
+    get touchEndFinishDelay() {
+      return TOUCH_END_FINISH_DELAY;
     },
 
     /**
@@ -107,25 +162,70 @@
       this.container.classList.add('dragging');
       this.icon.scale = ACTIVE_SCALE;
       this.icon.setActive(true);
+      this.container.parentNode.style.overflow = 'hidden';
 
       // Work around e.pageX/e.pageY being null (to make it easier to work with
       // injected events, or old versions of Marionette)
-      var pageX = (typeof e.pageX === 'undefined') ? this.icon.x : e.pageX;
-      var pageY = (typeof e.pageY === 'undefined') ? this.icon.y : e.pageY;
-
-      this.xAdjust = pageX - this.icon.x;
-      this.yAdjust = pageY - this.icon.y;
+      this.initialPageX = (typeof e.pageX === 'undefined') ?
+        this.icon.x : e.pageX;
+      this.initialPageY = (typeof e.pageY === 'undefined') ?
+        this.icon.y : e.pageY;
+      this.currentTouch = {
+          pageX: this.initialPageX,
+          pageY: this.initialPageY
+      };
 
       var items = this.gridView.items;
       var lastElement = items[items.length - 1];
       this.maxScroll = lastElement.y + lastElement.pixelHeight +
                        (this.icon.pixelHeight * ACTIVE_SCALE);
 
+      // If this is a group, or the sole icon in a group, make sure the
+      // surrounding groups are marked as invalid-drop so you can't initiate a
+      // move that would have no result.
+      var itemIndex = this.icon.detail.index;
+      if (this.icon.detail.type === 'divider') {
+        this.icon.element.classList.add('invalid-drop');
+        if (itemIndex > 0) {
+          for (var i = itemIndex - 1; i >= 0; i--) {
+            var item = items[i];
+            if (item.detail.type === 'divider') {
+              item.element.classList.add('invalid-drop');
+              break;
+            }
+          }
+        }
+      } else {
+        var itemBefore = itemIndex ? items[itemIndex - 1] : null;
+        var itemAfter = items[itemIndex + 1];
+
+        if ((itemAfter.detail.type === 'placeholder' ||
+             itemAfter.detail.type === 'divider') &&
+            (!itemBefore || itemBefore.detail.type === 'divider')) {
+          if (itemBefore) {
+            itemBefore.element.classList.add('invalid-drop');
+          }
+          var group, groupIndex = itemIndex;
+          do {
+            group = items[++groupIndex];
+          } while (group.detail.type !== 'divider');
+          group.element.classList.add('invalid-drop');
+        }
+      }
+
       // Redraw the icon at the new position and scale
-      this.positionIcon(pageX, pageY);
+      this.updateIconPosition();
+
+      // Rearrange grid to highlight the group underneath the icon
+      this.rearrangeGrid();
     },
 
-    finish: function(e) {
+    finish: function() {
+      // Complete the repositioning timeout
+      if (this.rearrangeGridTimeout !== null) {
+        this.rearrangeGrid();
+      }
+
       // Remove the dragging property after the icon has transitioned into
       // place to avoid jank due to animations starting that are disabled
       // when dragging.
@@ -195,12 +295,15 @@
         } else {
           this.doRearrange.call(this);
         }
+      } else {
+        this.icon.requestAttention();
       }
 
       // Hand back responsibility to Grid view to render the dragged item.
       this.icon.scale = 1;
       this.icon.setActive(false);
       this.icon.element.classList.remove('hovering');
+      this.target = null;
 
       this.gridView.render();
 
@@ -208,8 +311,6 @@
       if (this.dirty) {
         window.dispatchEvent(new CustomEvent('gaiagrid-saveitems'));
       }
-
-      this.target = null;
       this.dirty = false;
 
       setTimeout(function nextTick() {
@@ -219,7 +320,9 @@
     },
 
     finalize: function() {
+      this.container.parentNode.style.overflow = '';
       this.container.classList.remove('dragging');
+      this.container.classList.remove('hover-over-top');
       if (this.icon) {
         this.icon.element.removeEventListener('transitionend', this);
         this.icon = null;
@@ -231,6 +334,11 @@
       if (this.hoverGroup) {
         this.hoverGroup.element.classList.remove('drop-target');
         this.hoverGroup = null;
+      }
+      for (var i = 0, iLen = this.gridView.items.length;
+           i < iLen; i++) {
+        var item = this.gridView.items[i];
+        item.element.classList.remove('invalid-drop');
       }
     },
 
@@ -252,25 +360,16 @@
     },
 
     /**
-     * Scrolls the page if needed.
+     * Positions the dragged icon, rearranges the grid and scrolls the page if
+     * needed.
      * The page is scrolled via javascript if an icon is being moved,
      * and is within a percentage of a page edge.
-     * @param {Object} e A touch object from a touchmove event.
      */
-    scrollIfNeeded: function() {
+    positionAndScrollIfNeeded: function() {
       var touch = this.currentTouch;
-      if (!touch) {
+      if (!touch || !this.inDragAction) {
         this.isScrolling = false;
         return;
-      }
-
-      function doScroll(amount) {
-        /* jshint validthis:true */
-        this.isScrolling = true;
-        this.scrollable.scrollTop += amount;
-        exports.requestAnimationFrame(this.scrollIfNeeded.bind(this));
-        touch.pageY += amount;
-        this.positionIcon(touch.pageX, touch.pageY);
       }
 
       var scrollStep;
@@ -278,29 +377,37 @@
       var distanceFromTop = Math.abs(touch.pageY - docScroll);
       var distanceFromHeader = distanceFromTop -
         (this.editHeaderElement ? this.editHeaderElement.clientHeight : 0);
+      this.isScrolling = true;
+
       if (distanceFromTop > SCREEN_HEIGHT - EDGE_PAGE_THRESHOLD) {
         var maxY = this.maxScroll;
         scrollStep = this.getScrollStep(SCREEN_HEIGHT - distanceFromTop);
         // We cannot exceed the maximum scroll value
         if (touch.pageY >= maxY || maxY - touch.pageY < scrollStep) {
           this.isScrolling = false;
-          return;
         }
-
-        doScroll.call(this, scrollStep);
       } else if (touch.pageY > 0 && distanceFromHeader < EDGE_PAGE_THRESHOLD) {
         // We cannot go below the minimum scroll value
-        scrollStep = this.getScrollStep(distanceFromHeader);
-        scrollStep = Math.min(scrollStep, this.scrollable.scrollTop);
-        if (scrollStep <= 0) {
+        scrollStep = -this.getScrollStep(distanceFromHeader);
+        scrollStep = Math.max(scrollStep, -this.scrollable.scrollTop);
+        if (scrollStep >= 0) {
           this.isScrolling = false;
-          return;
         }
-
-        doScroll.call(this, -scrollStep);
       } else {
         this.isScrolling = false;
       }
+
+      if (!this.isScrolling) {
+        this.updateIconPosition();
+        this.deferredRearrangeGrid();
+        return;
+      }
+
+      this.updateIconPosition();
+      this.scrollable.scrollTop += scrollStep;
+      touch.pageY += scrollStep;
+
+      exports.requestAnimationFrame(this.positionAndScrollIfNeeded.bind(this));
     },
 
     /**
@@ -325,45 +432,93 @@
       }
     },
 
+    inFirstGroup: function(index) {
+      for (var i = index; i >= 0; i--) {
+        if (this.gridView.items[i].detail.type === 'divider') {
+          return false;
+        }
+      }
+      return true;
+    },
+
     /**
-     * Positions an icon on the grid.
-     * @param {Integer} pageX The X coordinate of the touch.
-     * @param {Integer} pageY The Y coordinate of the touch.
+     * Positions an icon on the grid using the current touch coordinates.
      */
-    positionIcon: function(pageX, pageY) {
-      var iconIsDivider = this.icon.detail.type === 'divider';
-
-      pageX = pageX - this.xAdjust;
-      pageY = pageY - this.yAdjust;
-
+    updateIconPosition: function() {
       var oldX = this.icon.x;
       var oldY = this.icon.y;
+      var newX = this.currentTouch.pageX - (this.initialPageX - this.icon.x);
+      var newY = this.currentTouch.pageY - (this.initialPageY - this.icon.y);
+
       // Adjust new icon coordinates for the slightly inflated scale so that
-      // it appears centered around the touch point.
-      var newX = pageX;
-      var newY = pageY;
-      if (!iconIsDivider) {
-        newX = pageX - ((this.icon.scale * this.gridView.layout.gridItemWidth) -
-                        this.gridView.layout.gridItemWidth) / 2;
-        newY = pageY - ((this.icon.scale * this.icon.pixelHeight) -
-                        this.icon.pixelHeight) / 2;
+      // it appears centered around the touch point. Dividers aren't scaled
+      // during dragging.
+      if (this.icon.detail.type !== 'divider') {
+        newX = newX - ((this.icon.scale * this.gridView.layout.gridItemWidth) -
+                       this.gridView.layout.gridItemWidth) / 2;
+        newY = newY - ((this.icon.scale * this.icon.pixelHeight) -
+                       this.icon.pixelHeight) / 2;
       }
+
       this.icon.setCoordinates(newX, newY);
       this.icon.render();
       this.icon.setCoordinates(oldX, oldY);
+    },
+
+    /**
+     * Will call rearrangeGrid after a short period, calculated based on how
+     * recently the grid was last rearranged.
+     */
+    deferredRearrangeGrid: function() {
+      if (this.rearrangeGridTimeout !== null) {
+        return;
+      }
+
+      var delay = Math.max(
+        REARRANGE_FREQUENCY, REARRANGE_COOLDOWN -
+          Math.max(0, Date.now() - this.lastRepositionTime));
+      this.rearrangeGridTimeout = setTimeout(() => {
+        this.rearrangeGridTimeout = null;
+        this.rearrangeGrid();
+      }, delay);
+    },
+
+    /**
+     * Rearranges the grid icons and groups based on the current position of
+     * the dragged icon.
+     */
+    rearrangeGrid: function() {
+      if (this.rearrangeGridTimeout !== null) {
+        clearTimeout(this.rearrangeGridTimeout);
+        this.rearrangeGridTimeout = null;
+      }
+
+      if (this.isScrolling) {
+        // We don't want the grid to shift while we're auto-scrolling
+        return;
+      }
+
+      var iconIsDivider = this.icon.detail.type === 'divider';
+      var pageX = this.currentTouch.pageX - (this.initialPageX - this.icon.x);
+      var pageY = this.currentTouch.pageY - (this.initialPageY - this.icon.y);
 
       // Reposition in the icons array if necessary.
       // Find the icon with the closest X/Y position of the move,
       // and insert ours before it.
       var foundIndex = 0;
-      var insertDividerAtTop =
-        !iconIsDivider && !this.gridView.config.features.disableSections;
+      var insertDividerAtTop = !this.gridView.config.features.disableSections;
       pageX += this.gridView.layout.gridItemWidth / 2;
       pageY += this.icon.pixelHeight / 2;
       if (pageY >= 0) {
-        insertDividerAtTop = false;
         foundIndex =
           this.gridView.getNearestItemIndex(pageX, pageY, iconIsDivider);
+
+        // If we're dragging a group over the first icon, a divider will
+        // be inserted at the top.
+        if (!(iconIsDivider && foundIndex === 0)) {
+          this.container.classList.remove('hover-over-top');
+          insertDividerAtTop = false;
+        }
       }
 
       // Clear the rearrange callback and hover item if we aren't hovering over
@@ -375,18 +530,19 @@
       }
       if (this.hoverItem) {
         this.hoverItem.element.classList.remove('hovered');
-        this.container.classList.remove('hover-over-top');
         this.hoverItem = null;
       }
 
       // Add the 'hovering' class to the dragged icon.
       if (foundIndex !== null) {
         this.icon.element.classList.add('hovering');
+      } else {
+        this.icon.element.classList.remove('hovering');
       }
 
       // Nothing to do if we find the dragged icon or no icon
-      if (foundIndex === null ||
-          (!insertDividerAtTop && foundIndex === this.icon.detail.index)) {
+      if (!insertDividerAtTop &&
+          (foundIndex === null || foundIndex === this.icon.detail.index)) {
         if (!iconIsDivider) {
           this.highlightGroup(this.icon.detail.index);
         }
@@ -405,15 +561,11 @@
         return;
       }
 
-      // If we're hovering over the top of the group, add a style class to show
-      // a visual hint that this is a valid drop position.
-      if (insertDividerAtTop || (iconIsDivider && pageY < 0)) {
-        this.container.classList.add('hover-over-top');
-      }
-
-      // Collections and groups should not trigger a hover over collections
-      if (foundItem.detail.type !== 'collection' ||
-          (this.icon.detail.type !== 'collection' && !iconIsDivider)) {
+      // If the item isn't a collection or a group, trigger the
+      // hovered state on the found item.
+      if (!insertDividerAtTop &&
+          (foundItem.detail.type !== 'collection' ||
+           (this.icon.detail.type !== 'collection' && !iconIsDivider))) {
         this.hoverItem = foundItem;
         this.hoverItem.element.classList.add('hovered');
       }
@@ -427,10 +579,10 @@
       var createDivider = insertDividerAtTop;
       if (!insertDividerAtTop && !iconIsDivider &&
           (foundItem.detail.type === 'divider')) {
-        // Allow dropping into a collapsed group
-        createDivider = !foundItem.detail.collapsed ||
-          (pageY >= foundItem.y + foundItem.pixelHeight);
-        if (!createDivider) {
+        // Allow dropping into a collapsed group if the new position is in
+        // the top 2/3 of the group.
+        if (foundItem.detail.collapsed &&
+            pageY <= foundItem.y + (foundItem.pixelHeight * 2/3)) {
           rearrangeAfterDelay = false;
           foundItem.element.classList.remove('hovered');
 
@@ -439,6 +591,8 @@
           if (this.icon.detail.index < foundIndex) {
             foundItem = this.gridView.items[foundIndex - 1];
           }
+        } else {
+          createDivider = true;
         }
       }
 
@@ -447,6 +601,31 @@
         if (this.hoverGroup) {
           this.hoverGroup.element.classList.remove('drop-target');
           this.hoverGroup = null;
+        }
+
+        // Cancel rearrangement if it would have no effect.
+        var redundantRearrange = false;
+        if (insertDividerAtTop) {
+          if (iconIsDivider) {
+            redundantRearrange = this.inFirstGroup(this.icon.detail.index - 1);
+          } else {
+            redundantRearrange =
+              (this.icon.detail.index === 0 &&
+               this.gridView.items[1].detail.type === 'placeholder');
+          }
+        } else {
+          redundantRearrange = this.gridView.items[foundIndex].element.
+            classList.contains('invalid-drop');
+        }
+
+        if (redundantRearrange) {
+          if (this.hoverItem) {
+            this.hoverItem.element.classList.remove('hovered');
+            this.hoverItem = null;
+          }
+          return;
+        } else if (insertDividerAtTop) {
+          this.container.classList.add('hover-over-top');
         }
 
         this.doRearrange =
@@ -487,6 +666,9 @@
       // Place the dragged item into the new empty section
       var sIndex = items.indexOf(this.icon);
       this.rearrange(sIndex >= tIndex ? newDivider : tDivider);
+
+      // Make sure the new divider/group is in view
+      newDivider.requestAttention();
     },
 
     /**
@@ -545,7 +727,17 @@
       this.dirty = true;
       this.gridView.items.splice.apply(this.gridView.items, toInsert);
 
+      var oldX = this.icon.x;
+      var oldY = this.icon.y;
       this.gridView.render();
+
+      // In this case, we don't want to compensate for the icon moving, so
+      // we need to correct our initial values to stop the icon from jumping
+      // after rearranging.
+      this.initialPageX -= oldX - this.icon.x;
+      this.initialPageY -= oldY - this.icon.y;
+
+      this.lastRepositionTime = Date.now();
     },
 
     enterEditMode: function() {
@@ -555,6 +747,7 @@
       this.gridView.element.dispatchEvent(
         new CustomEvent('editmode-start'));
       document.addEventListener('visibilitychange', this);
+      this.container.addEventListener('collection-close', this);
       this.gridView.render();
     },
 
@@ -566,24 +759,26 @@
       }
 
       this.inEditMode = false;
+      this.cancelLongPressTimeout();
       this.container.classList.remove('edit-mode');
       document.body.classList.remove('edit-mode');
       this.gridView.element.dispatchEvent(new CustomEvent('editmode-end'));
       document.removeEventListener('visibilitychange', this);
-      this.removeDragHandlers();
+      this.container.removeEventListener('collection-close', this);
       this.gridView.render();
     },
 
-    removeDragHandlers: function() {
-      this.container.removeEventListener('touchmove', this);
-      this.container.removeEventListener('touchend', this);
-      window.removeEventListener('touchcancel', this);
+    cancelLongPressTimeout: function() {
+      if (this.longPressTimeout !== null) {
+        clearTimeout(this.longPressTimeout);
+        this.longPressTimeout = null;
+      }
     },
 
-    addDragHandlers: function() {
-      this.container.addEventListener('touchmove', this);
-      this.container.addEventListener('touchend', this);
-      window.addEventListener('touchcancel', this);
+    inLongPressThreshold: function(x, y) {
+      return (
+        Math.abs(x - this.touchStart.screenX) < EDIT_LONG_PRESS_THRESHOLD &&
+        Math.abs(y - this.touchStart.screenY) < EDIT_LONG_PRESS_THRESHOLD);
     },
 
     /**
@@ -591,6 +786,10 @@
      */
     handleEvent: function(e) {
       switch(e.type) {
+          case 'collection-close':
+            this.exitEditMode();
+            break;
+
           case 'visibilitychange':
             if (document.hidden) {
               this.exitEditMode();
@@ -598,11 +797,40 @@
             break;
 
           case 'touchstart':
-            this.canceled = e.touches.length > 1;
+            this.cancelLongPressTimeout();
+
+            if (e.touches.length > 1) {
+              if (this.inDragAction) {
+                this.finish();
+              }
+              return;
+            }
+
+            if (this.inEditMode) {
+              this.touchStart.x = e.touches[0].pageX;
+              this.touchStart.y = e.touches[0].pageY;
+              this.touchStart.screenX = e.touches[0].screenX;
+              this.touchStart.screenY = e.touches[0].screenY;
+              this.longPressTimeout = setTimeout(() => {
+                this.longPressTimeout = null;
+                this.handleEvent({
+                  type: 'contextmenu',
+                  target: e.target,
+                  pageX: this.touchStart.x,
+                  pageY: this.touchStart.y,
+                  preventDefault: function() {},
+                  stopImmediatePropagation: function() {}
+                });
+              }, EDIT_LONG_PRESS_DELAY);
+            }
             break;
 
           case 'contextmenu':
-            if (this.icon || this.canceled) {
+            this.cancelLongPressTimeout();
+
+            if (this.gridView._collectionOpen || this.icon) {
+              e.stopImmediatePropagation();
+              e.preventDefault();
               return;
             }
 
@@ -613,24 +841,22 @@
               return;
             }
 
-            this.target = e.target;
-
-            if (!this.target) {
+            if (!e.target) {
               return;
             }
 
-            this.icon = this.gridView.findItemFromElement(this.target);
+            this.icon = this.gridView.findItemFromElement(e.target, true);
 
-            if (!this.icon || !this.icon.isDraggable() ||
+            if (!this.icon || !this.icon.element || !this.icon.isDraggable() ||
                 this.icon.detail.type === 'placeholder') {
               this.icon = null;
               return;
             }
 
-            this.addDragHandlers();
-
+            e.stopImmediatePropagation();
             e.preventDefault();
 
+            this.target = this.icon.element;
             this.begin(e);
 
             break;
@@ -638,30 +864,50 @@
           case 'touchmove':
             var touch = e.touches[0];
 
-            this.positionIcon(touch.pageX, touch.pageY);
+            if (this.inDragAction) {
+              this.currentTouch = {
+                pageX: touch.pageX,
+                pageY: touch.pageY
+              };
 
-            this.currentTouch = {
-              pageX: touch.pageX,
-              pageY: touch.pageY
-            };
-
-            if (!this.isScrolling) {
-              this.scrollIfNeeded();
+              if (!this.isScrolling) {
+                this.positionAndScrollIfNeeded();
+              }
+            } else if (this.longPressTimeout !== null &&
+                       !this.inLongPressThreshold(touch.screenX,
+                                                  touch.screenY)) {
+              this.cancelLongPressTimeout();
             }
 
             break;
 
+          case 'click':
           case 'touchcancel':
-            this.removeDragHandlers();
-            this.finish();
-            this.finalize();
+            if (this.inDragAction) {
+              this.finish();
+              this.finalize();
+            }
+
+            this.cancelLongPressTimeout();
             break;
+
           case 'touchend':
-            // Ensure the app is not launched
-            e.stopImmediatePropagation();
-            e.preventDefault();
-            this.removeDragHandlers();
-            this.finish(e);
+            if (this.inDragAction) {
+              // Ensure the app is not launched
+              e.stopImmediatePropagation();
+              e.preventDefault();
+
+              // As contextmenu event can be synthesized, it's possible for it
+              // to happen in the same event-loop as touchend, meaning
+              // finish would be called immediately after begin. This would
+              // mean that the icon doesn't get a chance to transition and
+              // the transitionend that we expect won't be called, so finalize
+              // also won't be called, leaving us in an inconsistent state.
+              // It would be so great if there was a transitionstart event :(
+              setTimeout(() => { this.finish(); }, TOUCH_END_FINISH_DELAY);
+            }
+
+            this.cancelLongPressTimeout();
             break;
 
           case 'transitionend':

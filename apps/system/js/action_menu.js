@@ -1,3 +1,5 @@
+/* global Service */
+
 'use strict';
 
 (function(exports) {
@@ -15,11 +17,13 @@
    * @param {Boolean} preventFocusChange Set to true to prevent focus changing.
    */
   function ActionMenu(listItems, titleL10nId, successCb, cancelCb,
-  preventFocusChange) {
+  preventFocusChange, askForDefaultChoice) {
     this.onselected = successCb || function() {};
     this.oncancel = cancelCb || function() {};
     this.listItems = listItems;
     this.titleL10nId = titleL10nId;
+    this.askForDefaultChoice = askForDefaultChoice;
+    Service.request('registerHierarchy', this);
   }
 
   ActionMenu.prototype = {
@@ -52,6 +56,23 @@
 
       this.container.appendChild(this.header);
 
+      // And a default choice button if asked
+      if (this.askForDefaultChoice) {
+        this.defaultChoice = document.createElement('label');
+        this.defaultChoice.setAttribute('class', 'pack-checkbox');
+        this.defaultChoice.setAttribute('data-action', 'set-default-action');
+
+        this.defaultChoiceInput = document.createElement('input');
+        this.defaultChoiceInput.setAttribute('type', 'checkbox');
+
+        this.defaultChoiceSpan = document.createElement('span');
+        this.defaultChoiceSpan.setAttribute('data-l10n-id',
+                                            'set-default-action');
+
+        this.defaultChoice.appendChild(this.defaultChoiceInput);
+        this.defaultChoice.appendChild(this.defaultChoiceSpan);
+      }
+
       // Following our paradigm we need a cancel
       this.cancel = document.createElement('button');
       this.cancel.setAttribute('data-l10n-id', 'cancel');
@@ -59,9 +80,7 @@
 
       // We have a menu with all the options
       this.menu = document.createElement('menu');
-
       this.container.appendChild(this.menu);
-      this.container.classList.add('visible');
 
       // We append to System app (actually to '#screen')
       var screen = document.getElementById('screen');
@@ -82,6 +101,60 @@
       if (this.preventFocusChange) {
         this.menu.addEventListener('mousedown', this.preventFocusChange);
       }
+
+      // Animate the menu onto the screen (in a nested raf to avoid the
+      // style change coalescing and not running the transition).
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          this.container.classList.add('visible');
+          this.active = true;
+          this.publish('-activated');
+        });
+      });
+    },
+
+    /**
+     * Prefix added to the action menu published event.
+     * @memberof ActionMenu.prototype
+     */
+    EVENT_PREFIX: 'actionmenu',
+
+    /**
+     * Publish relevant action menu events.
+     * @param  {String} eventName name of the event.
+     * @memberof ActionMenu.prototype
+     */
+    publish: function(eventName) {
+      var event = new CustomEvent(this.EVENT_PREFIX + eventName);
+      window.dispatchEvent(event);
+    },
+
+    /**
+     * Indicates if action menu is active.
+     * @return {Boolean} action menu active flag.
+     * @memberof ActionMenu.prototype
+     */
+    isActive: function() {
+      return this.active;
+    },
+
+    /**
+     * Sets action meny hierarchy.
+     * @memberof ActionMenu.prototype
+     */
+    setHierarchy: function() {
+      return true;
+    },
+
+    /**
+     * Handle hierarchy based event.
+     * @memberof ActionMenu.prototype
+     */
+    respondToHierarchyEvent: function(evt) {
+      if (this['_handle_' + evt.type]) {
+        return this['_handle_' + evt.type](evt);
+      }
+      return true;
     },
 
     /**
@@ -102,6 +175,21 @@
       if (this.preventFocusChange) {
         this.menu.removeEventListener('mousedown', this.preventFocusChange);
       }
+
+      Service.request('unregisterHierarchy', this);
+    },
+
+    /**
+     * This changes the input to be checked or unchecked
+     * @memberof ActionMenu.prototype
+     */
+    toggleSetDefaultAction: function() {
+      var checked = this.defaultChoiceInput.checked;
+      if (checked) {
+        this.defaultChoiceInput.removeAttribute('checked');
+      } else {
+        this.defaultChoiceInput.setAttribute('checked', true);
+      }
     },
 
     /**
@@ -113,6 +201,7 @@
       items.forEach(function traveseItems(item) {
         var action = document.createElement('button');
         action.dataset.value = item.value;
+        action.dataset.manifest = item.manifest;
         action.textContent = item.label;
 
         if (item.icon) {
@@ -121,6 +210,13 @@
         }
         this.menu.appendChild(action);
       }, this);
+
+      if (this.askForDefaultChoice) {
+        this.defaultChoiceSpan.setAttribute('data-l10n-id',
+                                            'set-default-action');
+        this.menu.appendChild(this.defaultChoice);
+      }
+
       this.menu.appendChild(this.cancel);
     },
 
@@ -130,8 +226,15 @@
      * @param  {Function} callback The callback to call after hiding.
      */
     hide: function(callback) {
+      var self = this;
+      this.container.addEventListener('transitionend', function doHide(e) {
+        self.container.removeEventListener('transitionend', doHide);
+        self.stop();
+      });
       this.container.classList.remove('visible');
-      this.stop();
+      this.active = false;
+      this.publish('-deactivated');
+
       if (callback && typeof callback === 'function') {
         setTimeout(callback);
       }
@@ -173,10 +276,22 @@
         case 'click':
           evt.preventDefault();
           var action = target.dataset.action;
-          if (action && action === 'cancel') {
-             this.hide();
-             this.oncancel();
-             return;
+          if (action) {
+            switch (action) {
+              case 'cancel':
+                this.hide();
+                this.oncancel();
+                break;
+              case 'set-default-action':
+                this.toggleSetDefaultAction();
+                break;
+            }
+            return;
+          }
+
+          var defaultSelected = false;
+          if (this.askForDefaultChoice) {
+            defaultSelected = !!this.defaultChoiceInput.getAttribute('checked');
           }
 
           var value = target.dataset.value;
@@ -184,7 +299,7 @@
             return;
           }
           value = parseInt(value);
-          this.hide(this.onselected.bind(this, value));
+          this.hide(this.onselected.bind(this, value, defaultSelected));
           break;
 
         case 'home':

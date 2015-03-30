@@ -23,12 +23,6 @@ Rocketbar.clientOptions = {
     // This is true on Gonk, but false on desktop, so override.
     'dom.inter-app-communication-api.enabled': true,
     'dom.w3c_touch_events.enabled': 1
-  },
-  settings: {
-    'homescreen.manifestURL':
-      'app://verticalhome.gaiamobile.org/manifest.webapp',
-    'ftu.manifestURL': null,
-    'lockscreen.enabled': false
   }
 };
 
@@ -43,8 +37,7 @@ Rocketbar.prototype = {
     clear: '#rocketbar-clear',
     backdrop: '#rocketbar-backdrop',
     results: '#rocketbar-results',
-    appTitle: '.appWindow.active .chrome .title',
-    permissionOk: '#permission-yes'
+    appTitle: '.appWindow.active .chrome .title'
   },
 
   /**
@@ -160,10 +153,6 @@ Rocketbar.prototype = {
     });
   },
 
-  goThroughPermissionPrompt: function() {
-    this.client.helper.waitForElement(this.selectors.permissionOk).click();
-  },
-
   get rocketbar() {
     return this.client.findElement(this.selectors.rocketbar);
   },
@@ -194,9 +183,5 @@ Rocketbar.prototype = {
 
   get backdrop() {
     return this.client.findElement(this.selectors.backdrop);
-  },
-
-  get permissionOk() {
-    return this.client.findElement(this.selectors.permissionOk);
   }
 };

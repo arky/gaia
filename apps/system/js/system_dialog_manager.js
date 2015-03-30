@@ -39,7 +39,8 @@
      */
     elements: {
       windows: null,
-      screen: null
+      screen: null,
+      containerElement: document.getElementById('dialog-overlay')
     },
 
     /**
@@ -56,13 +57,17 @@
      */
     configs: {
       listens: ['system-dialog-created',
+                'simlockcreated',
                 'system-dialog-show',
                 'system-dialog-hide',
                 'simlockshow',
                 'simlockhide',
                 'system-dialog-requestfocus',
+                'simlockrequestfocus',
                 'home',
-                'holdhome']
+                'holdhome',
+                'homescreeneopened',
+                'appopened']
     }
   };
 
@@ -72,12 +77,13 @@
 
   SystemDialogManager.prototype.setHierarchy = function(active) {
     if (!this.states.activeDialog) {
-      return;
+      return false;
     }
     if (active) {
       this.states.activeDialog.focus();
     }
     this.states.activeDialog._setVisibleForScreenReader(active);
+    return true;
   };
 
   SystemDialogManager.prototype.name = 'SystemDialogManager';
@@ -152,6 +158,13 @@
   SystemDialogManager.prototype.handleEvent = function sdm_handleEvent(evt) {
     var dialog = null;
     switch (evt.type) {
+      // We only care about appWindow's fullscreen state because
+      // we are on top of the appWindow.
+      case 'appopened':
+      case 'homescreenopened':
+        this.elements.containerElement.classList.toggle('fullscreen',
+          evt.detail.isFullScreen());
+        break;
       case 'system-dialog-requestfocus':
       case 'simlockrequestfocus':
         if (evt.detail !== this.states.activeDialog) {
@@ -189,7 +202,8 @@
    * @memberof SystemDialogManager
    */
   SystemDialogManager.prototype.initElements = function sdm_initElements() {
-    var selectors = { windows: 'windows', screen: 'screen'};
+    var selectors = { windows: 'windows', screen: 'screen',
+      containerElement: 'dialog-overlay'};
     for (var name in selectors) {
       var id = selectors[name];
       this.elements[name] = document.getElementById(id);

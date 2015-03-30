@@ -1,5 +1,5 @@
-/* global Card, SettingsListener,
-          Service, homescreenLauncher, StackManager */
+/* global Card, eventSafety, SettingsListener, layoutManager,
+          Service, homescreenLauncher, StackManager, OrientationManager */
 
 (function(exports) {
   'use strict';
@@ -65,6 +65,9 @@
   TaskManager.prototype.EVENT_PREFIX = 'taskmanager';
   TaskManager.prototype.name = 'TaskManager';
 
+  TaskManager.prototype.setHierarchy = function() {
+    return true;
+  };
   /**
    * initialize
    * @memberOf TaskManager.prototype
@@ -72,6 +75,7 @@
   TaskManager.prototype.start = function() {
     this._fetchElements();
     this._registerEvents();
+    this._appClosedHandler = this._appClosed.bind(this);
     Service.request('registerHierarchy', this);
   };
 
@@ -103,6 +107,11 @@
 
     SettingsListener.unobserve(this.SCREENSHOT_PREVIEWS_SETTING_KEY,
                                this.onPreviewSettingsChange);
+  };
+
+  TaskManager.prototype._appClosed = function cs_appClosed(evt) {
+    window.removeEventListener('appclosed', this._appClosedHandler);
+    this.screenElement.classList.add('cards-view');
   };
 
   /**
@@ -141,8 +150,6 @@
       app.enterTaskManager();
     });
 
-    this.publish('cardviewbeforeshow');
-
     this._placeCards();
     this.setActive(true);
 
@@ -159,10 +166,7 @@
       activeApp.close();
       screenElement.classList.add('cards-view');
     } else {
-      window.addEventListener('appclosed', function finish() {
-        window.removeEventListener('appclosed', finish);
-        screenElement.classList.add('cards-view');
-      });
+      window.addEventListener('appclosed', this._appClosedHandler);
     }
   };
 
@@ -173,12 +177,13 @@
    *
    */
   TaskManager.prototype.hide = function cs_hideCardSwitcher() {
-    if (!this._active) {
+    if (!this.isActive()) {
       return;
     }
     this._unregisterShowingEvents();
     this._removeCards();
     this.setActive(false);
+    window.removeEventListener('appclosed', this._appClosedHandler);
     this.screenElement.classList.remove('cards-view');
 
     var detail;
@@ -409,20 +414,20 @@
 
       case 'select' :
 
-        if (this.position == card.position) {
-          this.exitToApp(card.app);
-        } else {
+        if (this.position != card.position) {
           // Make the target app, the selected app
           this.position = card.position;
           this.alignCurrentCard();
+        }
 
-          var self = this;
-          this.currentCard.element.addEventListener('transitionend',
-                                                    function onCenter(e) {
-            e.target.removeEventListener('transitionend', onCenter);
+        var self = this;
+        this.currentCard.element.addEventListener('transitionend',
+          function afterTransition(e) {
+            e.target.removeEventListener('transitionend', afterTransition);
             self.exitToApp(card.app);
           });
-        }
+        this.currentCard.element.classList.add('select');
+
         break;
     }
   };
@@ -447,26 +452,19 @@
       this.newStackPosition = position;
     }
 
-    setTimeout((function() {
-      var safetyTimeout = null;
-      var finish = (function() {
-        clearTimeout(safetyTimeout);
+    setTimeout(() => {
+      var finish = () => {
         this.hide();
-      }).bind(this);
+      };
 
       if (app.isHomescreen) {
         app.open();
         finish();
       } else {
         app.open('from-cardview');
-        app.element.addEventListener('_opened', function opWait() {
-          app.element.removeEventListener('_opened', opWait);
-          finish();
-        });
+        eventSafety(app.element, '_opened', finish, 400);
       }
-
-      safetyTimeout = setTimeout(finish, 400);
-    }).bind(this), 100);
+    }, 100);
   };
 
   /**
@@ -506,6 +504,7 @@
 
   TaskManager.prototype._handle_home = function() {
     if (this.isActive()) {
+      this._shouldGoBackHome = true;
       this.exitToApp();
       return false;
     }
@@ -522,14 +521,44 @@
       filter = (evt.detail && evt.detail.filter) || null;
     }
 
-    var app = Service.currentApp;
-    if (app && !app.isHomescreen) {
-      app.getScreenshot(function onGettingRealtimeScreenshot() {
+
+    var shouldResize = (OrientationManager.defaultOrientation !=
+                        OrientationManager.fetchCurrentOrientation());
+    var shouldHideKeyboard = layoutManager.keyboardEnabled;
+
+    this.publish('cardviewbeforeshow'); // Will hide the keyboard if needed
+
+    var finish = () => {
+      if (shouldHideKeyboard) {
+        window.addEventListener('keyboardhidden', function kbHidden() {
+          window.removeEventListener('keyboardhidden', kbHidden);
+          shouldHideKeyboard = false;
+          setTimeout(finish);
+        });
+        return;
+      }
+
+      screen.mozLockOrientation(OrientationManager.defaultOrientation);
+      if (shouldResize) {
+        window.addEventListener('resize', function resized() {
+          window.removeEventListener('resize', resized);
+          shouldResize = false;
+          setTimeout(finish);
+        });
+        return;
+      }
+
+      var app = Service.currentApp;
+      if (app && !app.isHomescreen) {
+        app.getScreenshot(function onGettingRealtimeScreenshot() {
+          this.show(filter);
+        }.bind(this), 0, 0, 300);
+      } else {
         this.show(filter);
-      }.bind(this), 0, 0, 400);
-    } else {
-      this.show(filter);
-    }
+      }
+    };
+
+    finish();
   };
 
   /**
@@ -615,7 +644,6 @@
 
       case 'lockscreen-appopened':
       case 'attentionopened':
-        this.hide();
         this.exitToApp();
         break;
 

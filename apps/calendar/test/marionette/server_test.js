@@ -1,4 +1,4 @@
-/* global __dirname, require, marionette, setup, suite, teardown, test */
+/* global require, marionette, setup, suite, teardown, test */
 'use strict';
 
 var Calendar = require('./lib/calendar'),
@@ -6,17 +6,11 @@ var Calendar = require('./lib/calendar'),
     assert = require('chai').assert,
     debug = require('debug')('marionette:server_test');
 
-var sharedPath = __dirname + '/../../../../shared/test/integration',
-    calendarName = 'firefox-os';
+var calendarName = 'firefox-os';
 
 marionette('interop basic', function() {
   var app, server;
-  var client = marionette.client({
-    settings: {
-      'ftu.manifestURL': null,
-      'lockscreen.enabled': false
-    }
-  });
+  var client = marionette.client();
 
   var vanillaEvent = Object.freeze({
     title: 'Vanilla event',
@@ -79,10 +73,6 @@ marionette('interop basic', function() {
 
   suite('server', function() {
     setup(function(done) {
-      debug('Inject mozNotification mock.');
-      client.contentScript.inject(sharedPath +
-        '/mock_navigator_moz_notification.js');
-
       // Start server if it's not already up.
       if (server) {
         return onServerUp(done);

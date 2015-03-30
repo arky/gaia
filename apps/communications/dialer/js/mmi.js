@@ -1,5 +1,5 @@
-/* globals LazyL10n, LazyLoader, MmiUI, MobileOperator, Notification,
-           NotificationHelper, Promise */
+/* globals LazyLoader, MmiUI, MobileOperator, Notification, NotificationHelper,
+           Promise */
 
 /* exported MmiManager */
 
@@ -30,6 +30,8 @@ var MmiManager = {
       return Promise.resolve();
     }
 
+    this._ = navigator.mozL10n.get;
+
     var self = this;
     var lazyFiles = ['/shared/js/icc_helper.js',
                      '/shared/style/input_areas.css',
@@ -37,12 +39,9 @@ var MmiManager = {
 
     return new Promise(function(resolve, reject) {
       LazyLoader.load(lazyFiles, function() {
-        LazyL10n.get(function localized(_) {
-          MmiUI.init(_);
-          self._ = _;
-          self._ready = true;
-          resolve();
-        });
+        MmiUI.init();
+        self._ready = true;
+        resolve();
       });
     });
   },
@@ -255,9 +254,9 @@ var MmiManager = {
         // If the error is related with an incorrect old PIN, we get the
         // number of remainings attempts.
         if (mmiError.additionalInformation &&
-            (mmiError.name === 'emMmiErrorPasswordIncorrect' ||
-             mmiError.name === 'emMmiErrorBadPin' ||
-             mmiError.name === 'emMmiErrorBadPuk')) {
+            (mmiError.statusMessage === 'emMmiErrorPasswordIncorrect' ||
+             mmiError.statusMessage === 'emMmiErrorBadPin' ||
+             mmiError.statusMessage === 'emMmiErrorBadPuk')) {
           error += '\n' + this._('emMmiErrorPinPukAttempts', {
             n: mmiError.additionalInformation
           });
@@ -313,7 +312,7 @@ var MmiManager = {
       self._pendingRequest = null;
       self._session = session;
       // Do not notify the UI if no message to show.
-      if (message === null && session) {
+      if (!message && session) {
         return;
       }
 

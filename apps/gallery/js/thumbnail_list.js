@@ -106,3 +106,7 @@ ThumbnailList.prototype.reset = function() {
   this.groupMap = {};
   this.count = 0;
 };
+
+ThumbnailList.prototype.localize = function() {
+  this.itemGroups.forEach(function(group) { group.localize(); });
+};

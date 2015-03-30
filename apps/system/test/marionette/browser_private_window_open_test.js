@@ -9,10 +9,6 @@ marionette('Private Browser - Window.open', function() {
     prefs: {
       'focusmanager.testmode': true,
       'dom.w3c_touch_events.enabled': 1
-    },
-    settings: {
-      'ftu.manifestURL': null,
-      'lockscreen.enabled': false
     }
   });
 
@@ -35,8 +31,6 @@ marionette('Private Browser - Window.open', function() {
     search = client.loader.getAppClass('search');
     system = client.loader.getAppClass('system');
     system.waitForStartup();
-
-    search.removeGeolocationPermission();
   });
 
   test('Open windows from private browsers are also private', function() {

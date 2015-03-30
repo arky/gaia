@@ -2,19 +2,27 @@
 /* global LogShake,
           MockDOMRequest,
           MockModalDialog,
+          MockMozActivity,
           MockNavigatorGetDeviceStorage,
           MockNotification,
-          MockL10n
+          MockL10n,
+          MockService,
+          MocksHelper
 */
 
-requireApp('system/js/devtools/logshake.js');
-
+require('/js/devtools/logshake.js');
 require('/shared/test/unit/mocks/mock_l10n.js');
 require('/shared/test/unit/mocks/mock_notification.js');
-requireApp('system/shared/test/unit/mocks/mock_event_target.js');
-requireApp('system/shared/test/unit/mocks/mock_dom_request.js');
-requireApp('system/test/unit/mock_navigator_get_device_storage.js');
-requireApp('system/test/unit/mock_modal_dialog.js');
+require('/shared/test/unit/mocks/mock_event_target.js');
+require('/shared/test/unit/mocks/mock_dom_request.js');
+require('/shared/test/unit/mocks/mock_service.js');
+require('/test/unit/mock_activity.js');
+require('/test/unit/mock_modal_dialog.js');
+require('/test/unit/mock_navigator_get_device_storage.js');
+
+var mocksForLogshake = new MocksHelper([
+  'Service'
+]).init();
 
 /**
  * Test shake-to-log functionality.
@@ -26,9 +34,13 @@ suite('system/LogShake', function() {
   var realModalDialog;
   var realNavigatorGetDeviceStorage;
   var realNotification;
+  var realMozActivity;
 
   var logshake;
-  var logTag = 'logshake';
+  var logTagBase = 'logshake:';
+  var expectedLogTag = logTagBase + '1';
+
+  mocksForLogshake.attachTestHelpers();
 
   setup(function() {
     // XXX: Use screenshot's hack until system2 rolls around
@@ -46,6 +58,9 @@ suite('system/LogShake', function() {
     realNavigatorGetDeviceStorage = navigator.getDeviceStorage;
     navigator.getDeviceStorage = MockNavigatorGetDeviceStorage;
 
+    realMozActivity = window.MozActivity;
+    window.MozActivity = MockMozActivity;
+
     realL10n = navigator.mozL10n;
     navigator.mozL10n = MockL10n;
 
@@ -54,17 +69,92 @@ suite('system/LogShake', function() {
 
     logshake = new LogShake();
     logshake.start();
+    logshake._shakeId = 1;
   });
 
   teardown(function() {
+    logshake._shakeId = null;
     logshake.stop();
+
     window.DOMRequest = realDOMRequest;
     window.ModalDialog = realModalDialog;
     navigator.getDeviceStorage = realNavigatorGetDeviceStorage;
     navigator.mozL10n = realL10n;
     window.Notification = realNotification;
+    window.MozActivity = realMozActivity;
 
     // XXX: Do not restore window's logshake, its time is over
+  });
+
+  suite('_notify sends proper notifications >', function() {
+    var notifSpy;
+
+    setup(function() {
+      notifSpy = this.sinon.spy(window, 'Notification');
+    });
+
+    test('notification basics', function() {
+      logshake._notify('title', 'body');
+      sinon.assert.calledOnce(notifSpy);
+      sinon.assert.calledWithNew(notifSpy);
+
+      var args = notifSpy.firstCall.args;
+      assert.equal(args[0], 'title');
+      assert.equal(args[1].body, 'body');
+      assert.equal(args[1].tag, 'logshake:1');
+      assert.equal(args[1].data.systemMessageTarget, 'logshake');
+    });
+
+    test('without notification click handler', function() {
+      logshake._notify('title', 'body');
+      sinon.assert.calledOnce(notifSpy);
+
+      var notif = notifSpy.firstCall.returnValue;
+      assert.isUndefined(notif.onclick);
+    });
+
+    test('with notification click handler', function() {
+      logshake._notify('title', 'body', function() {});
+      sinon.assert.calledOnce(notifSpy);
+
+      var notif = notifSpy.firstCall.returnValue;
+      assert.isDefined(notif.onclick);
+    });
+
+    test('with payload', function() {
+      var payload = { error: 'BADBAD' };
+      logshake._notify('title', 'body', undefined, payload);
+      sinon.assert.calledOnce(notifSpy);
+
+      var data = notifSpy.firstCall.args[1].data;
+      assert.isDefined(data.logshakePayload);
+      assert.equal(data.logshakePayload, payload);
+    });
+  });
+
+  suite('Capture start handling', function() {
+    test('Create notification after capture-logs-start event', function() {
+      var notificationSpy = this.sinon.spy(window, 'Notification');
+
+      assert.equal(1, logshake._shakeId);
+
+      window.dispatchEvent(
+        new CustomEvent('capture-logs-start', { detail: {} }));
+
+      assert.isNotNull(logshake._shakeId);
+      assert.notEqual(1, logshake._shakeId);
+
+      // LogShake should dispatch a notification of some kind
+      assert.isTrue(notificationSpy.calledOnce,
+        'Notification should be called');
+      assert.isTrue(notificationSpy.calledWithNew(),
+        'Notification should be called with new');
+      assert.equal(notificationSpy.firstCall.args[0],
+        'logsSaving');
+      assert.equal(logshake._shakeId, parseInt(logshake._shakeId));
+      assert.equal(notificationSpy.firstCall.args[1].tag,
+        logTagBase + logshake._shakeId);
+    });
   });
 
   suite('Capture success handling', function() {
@@ -80,6 +170,7 @@ suite('system/LogShake', function() {
     });
 
     test('Notification sent', function() {
+      assert.isNull(logshake._shakeId);
       assert.isTrue(notificationSpy.calledOnce);
       assert.isTrue(notificationSpy.calledWithNew());
       assert.equal(notificationSpy.firstCall.args[0],
@@ -87,7 +178,7 @@ suite('system/LogShake', function() {
       assert.equal(notificationSpy.firstCall.args[1].body,
         logPrefix);
       assert.equal(notificationSpy.firstCall.args[1].tag,
-        logTag);
+        expectedLogTag);
     });
 
     test('Clicking notification', function() {
@@ -96,30 +187,63 @@ suite('system/LogShake', function() {
       var getSpy = this.sinon.spy(mockDeviceStorage, 'get');
 
       var notification = notificationSpy.firstCall.thisValue;
+      var closeSpy = this.sinon.spy(notification, 'close');
       notification.onclick();
 
       assert.isTrue(storageSpy.calledOnce, 'getDeviceStorage should be called');
       assert.isTrue(getSpy.calledOnce, '.get() should be called');
       assert.equal(getSpy.firstCall.args[0], filename,
         '.get() should have been called with filename from event');
+      sinon.assert.calledOnce(closeSpy);
+    });
+
+    test('triggerShareLogs launches MozActivity', function() {
+      var filename = 'dev-log-main.log';
+      var mockBlob = {
+        type: 'text/plain',
+        name: 'logs/timestamp/dev-log-main.log'
+      };
+
+      var expectedActivity = {
+        name: 'share',
+        data: {
+          blobs: [ mockBlob ],
+          filenames: [ filename ]
+        }
+      };
+
+      var mockDeviceStorage = MockNavigatorGetDeviceStorage();
+      mockDeviceStorage._freeSpace = Number.MAX_VALUE;
+
+      var getSpy = this.sinon.spy(mockDeviceStorage, 'get');
+      var activitySpy = this.sinon.spy(window, 'MozActivity');
+
+      logshake.triggerShareLogs([ filename ]);
+
+      // Simulate success of reading file
+      var getRequest = getSpy.getCall(0).returnValue;
+      getRequest.fireSuccess(mockBlob);
+      assert.isTrue(activitySpy.calledWith(expectedActivity));
     });
   });
 
-  suite('Capture error handling', function() {
+  suite('Capture error handling >', function() {
     var notificationSpy, errorMessage,
         errorUnixSharedSD, errorUnixGeneric,
         errorUnixExpectedBody;
 
     function sendError(e) {
+      assert.isNotNull(logshake._shakeId);
       window.dispatchEvent(new CustomEvent('capture-logs-error',
         { detail: { error: e } }));
+      assert.isNull(logshake._shakeId);
     }
 
     function notificationAsserts(spy) {
       assert.isTrue(spy.calledOnce, 'Notification should be called');
       assert.isTrue(spy.calledWithNew(), 'Notification created with new');
       assert.equal(spy.firstCall.args[0], 'logsSaveError');
-      assert.equal(spy.firstCall.args[1].tag, logTag);
+      assert.equal(spy.firstCall.args[1].tag, expectedLogTag);
     }
 
     function assertBody(expected) {
@@ -146,7 +270,7 @@ suite('system/LogShake', function() {
       assertBody(errorMessage);
     });
 
-    suite('Handling capture-logs-error event with errno', function() {
+    suite('Handling capture-logs-error event with errno >', function() {
       test('Handling known errno', function() {
         sendError(errorUnixSharedSD);
         notificationAsserts(notificationSpy);
@@ -160,48 +284,151 @@ suite('system/LogShake', function() {
       });
     });
 
-    suite('Clicking error notification', function() {
-      var notification;
-      function triggerClick() {
-        notification = notificationSpy.firstCall.thisValue;
-        notification.onclick();
-      }
+    suite('formatError behavior >', function() {
+      test('formatError() with a string', function() {
+        var error = 'Unknown error';
+        var msg = logshake.formatError(error);
+	assert.equal(msg, error);
+      });
 
-      var modalSpy;
+      test('formatError() with an object', function() {
+        var error = {
+          operation: 'makeDir',
+          unixErrno: 30 // EROFS
+        };
+        var msg = logshake.formatError(error);
+	assert.equal(msg, 'logsOperationFailed{"operation":"makeDir"}');
+      });
+    });
+
+    suite('Clicking error notification >', function() {
+      var notification, closeSpy, modalSpy;
+
       setup(function() {
         modalSpy = this.sinon.spy(MockModalDialog, 'alert');
       });
 
       test('Known errno', function() {
         sendError(errorUnixSharedSD);
-        triggerClick();
+        notification = notificationSpy.firstCall.thisValue;
+        closeSpy = this.sinon.spy(notification, 'close');
+        notification.onclick();
         assert.isTrue(modalSpy.calledWith('logsSaveError',
                                           'logsSDCardMaybeShared',
                                           { title: 'ok' }));
+        sinon.assert.calledOnce(closeSpy);
       });
 
       test('Unknown errno', function() {
         sendError(errorUnixGeneric);
-        triggerClick();
+        notification = notificationSpy.firstCall.thisValue;
+        closeSpy = this.sinon.spy(notification, 'close');
+        notification.onclick();
         assert.isTrue(modalSpy.calledWith('logsSaveError',
                                           'logsGenericError',
                                           { title: 'ok' }));
+        sinon.assert.calledOnce(closeSpy);
       });
     });
   });
 
-  test('Create notification after capture-logs-start event', function() {
-    var notificationSpy = this.sinon.spy(window, 'Notification');
+  suite('System message notification >', function() {
+    var serviceSpy;
 
-    window.dispatchEvent(new CustomEvent('capture-logs-start', { detail: {} }));
+    var notification = {
+      body: 'fake',
+      tag: 'logshake',
+      data: {
+        systemMessageTarget: 'logshake'
+      },
+      close: function() {}
+    };
 
-    // LogShake should dispatch a notification of some kind
-    assert.isTrue(notificationSpy.calledOnce, 'Notification should be called');
-    assert.isTrue(notificationSpy.calledWithNew(),
-      'Notification should be called with new');
-    assert.equal(notificationSpy.firstCall.args[0],
-      'logsSaving');
-    assert.equal(notificationSpy.firstCall.args[1].tag,
-      logTag);
+    suite('start/stop conditions', function() {
+      setup(function() {
+        logshake.stop();
+      });
+
+      teardown(function() {
+        logshake.start();
+      });
+
+      test('.start() requests handleSystemMessageNotification service',
+        function() {
+          serviceSpy = this.sinon.spy(MockService, 'request');
+          logshake.start();
+          assert.isTrue(serviceSpy.calledOnce);
+          assert.isTrue(serviceSpy.calledWith(
+            'handleSystemMessageNotification', 'logshake', logshake));
+          logshake.stop();
+        });
+
+      test('.stop() requests unhandleSystemMessageNotification service',
+        function() {
+          logshake.start();
+          serviceSpy = this.sinon.spy(MockService, 'request');
+          logshake.stop();
+          assert.isTrue(serviceSpy.calledOnce);
+          assert.isTrue(serviceSpy.calledWith(
+            'unhandleSystemMessageNotification', 'logshake', logshake));
+        });
+    });
+
+    suite('handleSystemMessageNotification behavior', function() {
+      test('calls triggerShareLogs for success cases', function() {
+        var triggerShareLogsSpy = this.sinon.spy(logshake, 'triggerShareLogs');
+        notification.data.logshakePayload = { logFilenames: [] };
+        logshake.handleSystemMessageNotification(notification);
+        assert.isTrue(triggerShareLogsSpy.calledOnce);
+        assert.isTrue(
+          triggerShareLogsSpy.calledWith(
+            notification.data.logshakePayload.logFilenames));
+        delete notification.data.logshakePayload;
+      });
+
+      test('calls showErrorMessage for error cases', function() {
+        var showErrorMessageSpy = this.sinon.spy(logshake, 'showErrorMessage');
+        notification.data.logshakePayload = { error: '' };
+        logshake.handleSystemMessageNotification(notification);
+        assert.isTrue(showErrorMessageSpy.calledOnce);
+        assert.isTrue(
+          showErrorMessageSpy.calledWith(
+            notification.data.logshakePayload.error));
+        delete notification.data.logshakePayload;
+      });
+
+      test('calls closeSystemMessageNotification',
+        function() {
+          var closeSpy =
+            this.sinon.spy(logshake, 'closeSystemMessageNotification');
+          logshake.handleSystemMessageNotification(notification);
+          assert.isTrue(closeSpy.calledOnce);
+          assert.isTrue(closeSpy.calledWith(notification));
+        });
+    });
+
+    suite('closeSystemMessageNotification behavior', function() {
+      var notifCloseSpy, notificationGetStub;
+
+      setup(function() {
+        notifCloseSpy = this.sinon.spy(notification, 'close');
+        notificationGetStub = function notificationGet() {
+          return {
+            then: function(cb) {
+              cb && cb([ notification ]);
+            }
+          };
+        };
+        this.sinon.stub(window.Notification, 'get', notificationGetStub);
+      });
+
+      test('closes notification by tag', function() {
+        logshake.closeSystemMessageNotification(notification);
+        assert.isTrue(window.Notification.get.calledOnce);
+        assert.isTrue(window.Notification.get.calledWith(
+          { tag: notification.tag}));
+        assert.isTrue(notifCloseSpy.calledOnce);
+      });
+    });
   });
 });

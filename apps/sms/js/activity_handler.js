@@ -1,7 +1,7 @@
 /* -*- Mode: js; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*- /
 /* vim: set shiftwidth=2 tabstop=2 autoindent cindent expandtab: */
 
-/*global Utils, MessageManager, Compose, OptionMenu, NotificationHelper,
+/*global Utils, MessageManager, Compose, NotificationHelper,
          Attachment, Notify, SilentSms, Threads, SMIL, Contacts,
          ThreadUI, Notification, Settings, Navigation */
 /*exported ActivityHandler */
@@ -16,12 +16,11 @@ const ActivityDataType = {
   IMAGE: 'image/*',
   AUDIO: 'audio/*',
   VIDEO: 'video/*',
-  URL: 'url'
+  URL: 'url',
+  VCARD: 'text/vcard'
 };
 
 var ActivityHandler = {
-  isLocked: false,
-
   // Will hold current activity object
   _activity: null,
 
@@ -38,8 +37,9 @@ var ActivityHandler = {
       })
     );
 
-    // We want to register the handler only when we're on the launch path
-    if (!window.location.hash.length) {
+    // We don't want to register these system handlers when app is run as
+    // inline activity
+    if (!Navigation.getPanelName().startsWith('activity')) {
       window.navigator.mozSetMessageHandler('sms-received',
         this.onSmsReceived.bind(this));
 
@@ -75,15 +75,15 @@ var ActivityHandler = {
   },
 
   /**
-  * Finds a contact from a number.
+  * Finds a contact from a number or email address.
   * Returns a promise that resolve with a contact
   * or is rejected if not found
   * @returns Promise that resolve to a
   * {number: String, name: String, source: 'contacts'}
   */
-  _findContactByNumber: function findContactByNumber(number) {
+  _findContactByTarget: function findContactByTarget(target) {
     var deferred = Utils.Promise.defer();
-    Contacts.findByPhoneNumber(number, (results) => {
+    Contacts.findByAddress(target, (results) => {
       var record, name, contact;
 
       // Bug 867948: results null is a legitimate case
@@ -91,7 +91,7 @@ var ActivityHandler = {
         record = results[0];
         name = record.name.length && record.name[0];
         contact = {
-          number: number,
+          number: target,
           name: name,
           source: 'contacts'
         };
@@ -99,7 +99,7 @@ var ActivityHandler = {
         deferred.resolve(contact);
         return;
       }
-      deferred.reject(new Error('No contact found with number: ' + number));
+      deferred.reject(new Error('No contact found with target: ' + target));
       return;
 
     });
@@ -108,36 +108,37 @@ var ActivityHandler = {
   },
 
   _onNewActivity: function newHandler(activity) {
-
-    // This lock is for avoiding several calls at the same time.
-    if (this.isLocked) {
-      return;
-    }
-
-    this.isLocked = true;
-
     var viewInfo = {
       body: activity.source.data.body,
-      number: activity.source.data.number,
+      number: activity.source.data.target || activity.source.data.number,
       contact: null,
       threadId: null
     };
 
-    // try to get a thread from number
-    // if no thread, promise is rejected and we try to find a contact
-    return MessageManager.findThreadFromNumber(viewInfo.number).then(
-      function onResolve(threadId) {
-        viewInfo.threadId = threadId;
-      },
-      function onReject() {
-        return ActivityHandler._findContactByNumber(viewInfo.number)
-          .then( (contact) => viewInfo.contact = contact);
-      }
-    )
-    // case no contact and no thread id: gobble the error
-    .catch(() => {})
-    // finally call toView whatever contact and threadId we have.
-    .then( () => this.toView(viewInfo) );
+    var focusComposer = false;
+    var threadPromise;
+    if (viewInfo.number) {
+      // It's reasonable to focus on composer if we already have some phone
+      // number or even contact to fill recipients input
+      focusComposer = true;
+      // try to get a thread from number
+      // if no thread, promise is rejected and we try to find a contact
+      threadPromise = MessageManager.findThreadFromNumber(viewInfo.number).then(
+        function onResolve(threadId) {
+          viewInfo.threadId = threadId;
+        },
+        function onReject() {
+          return ActivityHandler._findContactByTarget(viewInfo.number)
+            .then((contact) => viewInfo.contact = contact);
+        }
+      )
+      // case no contact and no thread id: gobble the error
+      .catch(() => {});
+    }
+
+    return (threadPromise || Promise.resolve()).then(
+      () => this.toView(viewInfo, focusComposer)
+    );
   },
 
   _onShareActivity: function shareHandler(activity) {
@@ -166,10 +167,13 @@ var ActivityHandler = {
         }, 0);
 
         if (size > Settings.mmsSizeLimitation) {
-          alert(navigator.mozL10n.get('files-too-large', {
-            n: activityData.blobs.length
-          }));
-          this.leaveActivity();
+          Utils.alert({
+            id: 'attached-files-too-large',
+            args: {
+              n: activityData.blobs.length,
+              mmsSize: (Settings.mmsSizeLimitation / 1024).toFixed(0)
+            }
+          }).then(() => this.leaveActivity());
           return;
         }
 
@@ -177,6 +181,14 @@ var ActivityHandler = {
         break;
       case ActivityDataType.URL:
         dataToShare = activityData.url;
+        break;
+      // As for the moment we only allow to share one vcard we treat this case
+      // in an specific block
+      case ActivityDataType.VCARD:
+        dataToShare = new Attachment(activityData.blobs[0], {
+          name: activityData.filenames[0],
+          isDraft: true
+        });
         break;
       default:
         this.leaveActivity(
@@ -219,126 +231,78 @@ var ActivityHandler = {
       return;
     }
 
-    var request = navigator.mozMobileMessage.getMessage(message.id);
-    request.onsuccess = function onsuccess() {
-      if (!Compose.isEmpty()) {
-        if (window.confirm(navigator.mozL10n.get('discard-new-message'))) {
-          ThreadUI.cleanFields();
-        } else {
-          return;
-        }
-      }
-
-      ActivityHandler.toView(message);
-    };
-
-    request.onerror = function onerror() {
-      alert(navigator.mozL10n.get('deleted-sms'));
-    };
-  },
-
-  // The unsent confirmation dialog provides 2 options: edit and discard
-  // discard: clear the message user typed
-  // edit: continue to edit the unsent message and ignore the activity
-  displayUnsentConfirmation: function ah_displayUnsentConfirmtion(activity) {
-    var msgDiv = document.createElement('div');
-    msgDiv.innerHTML = '<h1 data-l10n-id="unsent-message-title"></h1>' +
-                       '<p data-l10n-id="unsent-message-description"></p>';
-    var options = new OptionMenu({
-      type: 'confirm',
-      section: msgDiv,
-      items: [{
-        l10nId: 'unsent-message-option-edit',
-        method: function editOptionMethod() {
-          // we're already in message app, we don't need to do anything
-        }
-      },
-      {
-        l10nId: 'unsent-message-option-discard',
-        method: this.launchComposer.bind(this),
-        params: [activity]
-      }]
-    });
-    options.show();
-  },
-
-  // Launch the UI properly
-  launchComposer: function ah_launchComposer(activity) {
-    Navigation.toPanel('composer', { activity: activity });
-  },
-
-  // Check if we want to go directly to the composer or if we
-  // want to keep the previously typed text
-  triggerNewMessage: function ah_triggerNewMessage(body, number, contact) {
-     var activity = {
-        body: body || null,
-        number: number || null,
-        contact: contact || null
-      };
-
-    if (Compose.isEmpty()) {
-      this.launchComposer(activity);
-    } else {
-      // ask user how should we do
-      ActivityHandler.displayUnsentConfirmation(activity);
-    }
-  },
-  // Deliver the user to the correct view
-  // based on the params provided in the
-  // "message" object.
-  //
-  toView: function ah_toView(message) {
-    /**
-     *  "message" is either a message object that belongs
-     *  to a thread, or a message object from the system.
-     *
-     *
-     *  message {
-     *    number: A string phone number to pre-populate
-     *            the recipients list with.
-     *
-     *    body: An optional body to preset the compose
-     *           input with.
-     *
-     *    contact: An optional "contact" object
-     *
-     *    threadId: An option threadId corresponding
-     *              to a new or existing thread.
-     *
-     *  }
-     */
-
-    if (!message) {
+    // If we're currently in the target thread, just do nothing
+    if (Navigation.isCurrentPanel('thread', { id: message.threadId })) {
       return;
     }
 
-    this.isLocked = false;
-    var threadId = message.threadId ? message.threadId : null;
-    var body = message.body || '';
-    var number = message.number ? message.number : '';
-    var contact = message.contact ? message.contact : null;
+    MessageManager.getMessage(message.id).then((message) => {
+      if (!Threads.has(message.threadId)) {
+        Threads.registerMessage(message);
+      }
 
-    var showAction = function act_action() {
-      // If we only have a body, just trigger a new message.
-      if (!threadId) {
-        ActivityHandler.triggerNewMessage(body, number, contact);
+      if (Compose.isEmpty()) {
+        ActivityHandler.toView(message);
         return;
       }
 
-      Navigation.toPanel('thread', { id: threadId }).then(Compose.focus);
+      Utils.confirm(
+        'discard-new-message',
+        'unsent-message-title',
+        { text: 'unsent-message-option-discard', className: 'danger' }
+      ).then(() => {
+        ThreadUI.cleanFields();
+        ActivityHandler.toView(message);
+      });
+    }, function onGetMessageError() {
+      Utils.alert('deleted-sms');
+    });
+  },
+
+  /**
+   * Delivers the user to the correct view based on the params provided in the
+   * "message" parameter.
+   * @param {{number: string, body: string, contact: MozContact,
+   * threadId: number}} message It's either a message object that belongs to a
+   * thread, or a message object from the system. "number" is a string phone
+   * number to pre-populate the recipients list with, "body" is an optional body
+   * to preset the compose input with, "contact" is an optional MozContact
+   * instance, "threadId" is an optional threadId corresponding to a new or
+   * existing thread.
+   * @param {Boolean} focusComposer Indicates whether we need to focus composer
+   * when we navigate to Thread panel.
+   */
+  toView: function ah_toView(message, focusComposer) {
+    var navigateToView = function act_navigateToView() {
+      // If we have appropriate thread then let's forward user there, otherwise
+      // open new message composer.
+      if (message.threadId) {
+        Navigation.toPanel('thread', {
+          id: message.threadId,
+          focusComposer: focusComposer
+        });
+        return;
+      }
+
+      Navigation.toPanel('composer', {
+        activity: {
+          body: message.body || null,
+          number: message.number || null,
+          contact: message.contact || null
+        }
+      });
     };
 
     navigator.mozL10n.once(function waitLocalized() {
       if (!document.hidden) {
         // Case of calling from Notification
-        showAction();
+        navigateToView();
         return;
       }
 
-      document.addEventListener('visibilitychange',
-        function waitVisibility() {
-          document.removeEventListener('visibilitychange', waitVisibility);
-          showAction();
+      document.addEventListener('visibilitychange', function waitVisibility() {
+        document.removeEventListener('visibilitychange', waitVisibility);
+        navigateToView();
       });
     });
   },
@@ -383,17 +347,13 @@ var ActivityHandler = {
       // See: https://bugzilla.mozilla.org/show_bug.cgi?id=782211
       navigator.mozApps.getSelf().onsuccess = function(event) {
         var app = event.target.result;
-        var iconURL = NotificationHelper.getIconURI(app);
-
-        // XXX: Add params to Icon URL.
-        iconURL += '?type=class0';
 
         // We have to remove the SMS due to it does not have to be shown.
         MessageManager.deleteMessages(message.id, function() {
           app.launch();
           Notify.ringtone();
           Notify.vibrate();
-          alert(number + '\n' + message.body);
+          Utils.alert({ raw: message.body || '' }, { raw: number });
           releaseWakeLock();
         });
       };
@@ -551,7 +511,17 @@ var ActivityHandler = {
     //
     var params = Utils.params(message.imageURL);
 
+    // When notification is removed from notification tray, notification system
+    // message will still be fired, but "clicked" property will be equal to
+    // false. This should change once bug 1139363 is landed.
+    // When user clicks on notification we'll get two system messages,
+    // first to notify app that notification is clicked and then, once we show
+    // Thread panel to the user, we remove that notification from the tray that
+    // causes the second system message with "clicked" set to false.
     if (!message.clicked) {
+      // When app is run via notification system message there is no valid
+      // current panel set hence app is in the invalid state, so let's fix this.
+      Navigation.ensureCurrentPanel();
       return;
     }
 
@@ -562,7 +532,7 @@ var ActivityHandler = {
 
       // the type param is only set for class0 messages
       if (params.type === 'class0') {
-        alert(message.title + '\n' + message.body);
+        Utils.alert({ raw: message.body }, { raw: message.title });
         return;
       }
 

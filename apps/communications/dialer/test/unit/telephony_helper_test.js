@@ -1,9 +1,8 @@
-/* global ConfirmDialog, MocksHelper, MockIccHelper, MockNavigatorMozTelephony,
-   Promise, MockNavigatorMozMobileConnections, TelephonyHelper,
-   MockTelephonyMessages */
+/* global ConfirmDialog, MockCall, MocksHelper, MockIccHelper,
+          MockNavigatorMozMobileConnections, MockNavigatorMozTelephony,
+          MockTelephonyMessages, TelephonyHelper, TelephonyMessages, Promise */
 
 'use strict';
-
 
 require('/shared/test/unit/mocks/mock_confirm_dialog.js');
 require('/shared/test/unit/mocks/mock_lazy_loader.js');
@@ -11,12 +10,14 @@ require('/shared/test/unit/mocks/mock_navigator_moz_mobile_connections.js');
 require('/shared/test/unit/mocks/mock_navigator_moz_telephony.js');
 require('/shared/test/unit/mocks/dialer/mock_contacts.js');
 require('/shared/test/unit/mocks/dialer/mock_telephony_messages.js');
+require('/shared/test/unit/mocks/dialer/mock_call.js');
 
 require('/dialer/test/unit/mock_icc_helper.js');
 
 require('/dialer/js/telephony_helper.js');
 
 var mocksHelperForTelephonyHelper = new MocksHelper([
+  'Call',
   'Contacts',
   'ConfirmDialog',
   'LazyLoader',
@@ -24,10 +25,11 @@ var mocksHelperForTelephonyHelper = new MocksHelper([
   'TelephonyMessages'
 ]).init();
 
-// Constructor used to create a fake TelephonyCall object
 function TelephonyCall() {}
 
 suite('telephony helper', function() {
+  const DTMF_SEPARATOR_PAUSE_DURATION = 3000;
+
   var subject;
   var realMozTelephony;
   var realMozMobileConnections;
@@ -39,6 +41,8 @@ suite('telephony helper', function() {
   mocksHelperForTelephonyHelper.attachTestHelpers();
 
   suiteSetup(function() {
+    MockCall.prototype = new TelephonyCall();
+
     subject = TelephonyHelper;
 
     realMozTelephony = navigator.mozTelephony;
@@ -56,13 +60,16 @@ suite('telephony helper', function() {
   setup(function() {
     spyConfirmShow = this.sinon.spy(ConfirmDialog, 'show');
     mockTelephony = this.sinon.mock(MockNavigatorMozTelephony);
-    mockCall = new TelephonyCall();
+    mockCall = new MockCall('123456789', 'dialing', 0);
     MockNavigatorMozMobileConnections[0].voice = {};
     mockPromise = Promise.resolve(mockCall);
     this.sinon.stub(MockNavigatorMozTelephony, 'dial',
                     function() { return mockPromise;});
     this.sinon.stub(MockNavigatorMozTelephony, 'dialEmergency',
                     function() { return mockPromise;});
+    this.sinon.stub(MockNavigatorMozTelephony, 'sendTones', function() {
+      return Promise.resolve();
+    });
   });
 
   teardown(function() {
@@ -233,12 +240,15 @@ suite('telephony helper', function() {
       });
     });
 
-    test('should bind the onconnected callback', function(done) {
-      var onconnected = function uniq_onconnected() {};
-      subject.call('123', 0, null, onconnected);
+    test('should trigger the onconnected listeners when connected',
+    function(done) {
+      var onconnectedHandler = function() {
+        done();
+      };
+      subject.call('123', 0, null, onconnectedHandler);
       mockPromise.then(function() {
-        assert.equal(mockCall.onconnected, onconnected);
-      }).then(done, done);
+        mockCall.triggerEvent('connected');
+      });
     });
 
     test('should bind the ondisconnected callback', function(done) {
@@ -404,5 +414,86 @@ suite('telephony helper', function() {
     MockNavigatorMozMobileConnections[1].voice = {};
     subject.call('123', 1);
     sinon.assert.calledWith(navigator.mozTelephony.dial, '123', 1);
+  });
+
+  suite('<<pause>> DTMF separator', function() {
+    test('should allow dialing number with DTMF separator', function() {
+      subject.call('1233241,,123', 0);
+      sinon.assert.calledWith(navigator.mozTelephony.dial, '1233241');
+    });
+
+    test('a number that starts with pause is invalid', function() {
+      this.sinon.spy(TelephonyMessages, 'displayMessage');
+      subject.call(',012023423', 0);
+      sinon.assert.calledWith(TelephonyMessages.displayMessage, 'BadNumber');
+    });
+
+    test('should send DTMF tones after connection', function(done) {
+      subject.call('1233241,123', 0);
+      mockPromise.then(function() {
+        sinon.assert.notCalled(MockNavigatorMozTelephony.sendTones);
+        // Notify the connected event to the TelephonyCall.
+        mockCall.triggerEvent('connected');
+      }).then(function() {
+        // Start playing the first tone group and pause.
+        sinon.assert.calledWith(MockNavigatorMozTelephony.sendTones, '123',
+          DTMF_SEPARATOR_PAUSE_DURATION, null, 0);
+        done();
+      });
+    });
+
+    test('should send DTMF tones with correct card index', function(done) {
+      subject.call('123456,123', 1);
+      mockPromise.then(function() {
+        sinon.assert.notCalled(MockNavigatorMozTelephony.sendTones);
+        // Notify the connected event to the TelephonyCall.
+        mockCall.triggerEvent('connected');
+      }).then(function() {
+        // Start playing the first tone group and pause.
+        sinon.assert.calledWith(MockNavigatorMozTelephony.sendTones, '123',
+          DTMF_SEPARATOR_PAUSE_DURATION, null, 1);
+        done();
+      });
+    });
+
+    test('should wait 3 seconds after each separator', function(done) {
+      subject.call('123456789,123,,456,,,789', 0);
+      mockPromise.then(function() {
+        sinon.assert.notCalled(MockNavigatorMozTelephony.sendTones);
+        // Notify the connected event to the TelephonyCall.
+        mockCall.triggerEvent('connected');
+      }).then(function() {
+        // Start playing the first tone group and pause.
+        sinon.assert.calledWith(
+          MockNavigatorMozTelephony.sendTones, '123',
+          DTMF_SEPARATOR_PAUSE_DURATION, null, 0);
+          return Promise.resolve();
+      }).then(function() {
+        // Start playing the second tone group and pauses.
+        sinon.assert.calledWith(
+          MockNavigatorMozTelephony.sendTones, '456',
+          DTMF_SEPARATOR_PAUSE_DURATION * 2, null, 0);
+        return Promise.resolve();
+      }).then(function() {
+        // Start playing the third tone group and pauses.
+        sinon.assert.calledWith(
+          MockNavigatorMozTelephony.sendTones, '789',
+          DTMF_SEPARATOR_PAUSE_DURATION * 3, null, 0);
+        done();
+      });
+    });
+
+    test('should not play the pauses (",") at the end of the number',
+    function(done) {
+      subject.call('123456789,,,', 0);
+      mockPromise.then(function() {
+        sinon.assert.notCalled(MockNavigatorMozTelephony.sendTones);
+        // Notify the connected event to the TelephonyCall.
+        mockCall.triggerEvent('connected');
+      }).then(function() {
+        sinon.assert.notCalled(MockNavigatorMozTelephony.sendTones);
+        done();
+      });
+    });
   });
 });

@@ -6,10 +6,15 @@
 }
 
 /* Fav star in header */
-#contact-name-title.favorite {
-  background: url(/contacts/style/gphx/bitmap/default/vw-header/icons/fav-star.png) no-repeat right 1rem / 3rem;
-  padding-right: 3rem;
-  margin-right: -1rem;
+.favorite-indicator {
+  display: none;
+
+  background: url(/contacts/style/gphx/bitmap/default/vw-header/icons/fav-star.png) no-repeat center / 3rem;
+  padding: 0 1rem;
+}
+
+.favorite .favorite-indicator {
+  display: unset;
 }
 
 section[role="region"] > gaia-header .icon.icon-edit-contact {
@@ -252,7 +257,7 @@ div.with-overflow > p.input-container > input {
 }
 
 .two_fields > :first-child {
-  margin-right: 1rem;
+  -moz-margin-end: 1rem;
   width: 12rem;
 }
 
@@ -326,7 +331,9 @@ form p textarea + button[type="reset"].hide {
   overflow: hidden;
   width: 1.5rem;
   height: 1.5rem;
-  margin: -0.2rem 1rem 0 0;
+  margin: 0;
+  margin-top: -0.2rem;
+  -moz-margin-end: 1rem;
 }
 
 .icon-social.icon-fb,
@@ -339,6 +346,7 @@ form p textarea + button[type="reset"].hide {
 }
 
 #contact-detail p > strong,
+#contact-detail bdi > strong,
 .action-block b,
 .comment-notes {
   font-size: 1.6rem;
@@ -355,7 +363,7 @@ form p textarea + button[type="reset"].hide {
 }
 
 .facebook fieldset {
-  margin-left: 4rem;
+  -moz-margin-start: 4rem;
 }
 
 .facebook fieldset, .facebook legend, .facebook input {
@@ -450,7 +458,7 @@ gaia-header [data-icon] {
 }
 
 #view-settings [data-type="list"] .fb-item p {
-  padding-left: 4.2rem;
+  -moz-padding-start: 4.2rem;
   font-size: 1.4rem;
 }
 
@@ -461,6 +469,10 @@ gaia-header [data-icon] {
 
 #view-settings [data-type="list"] .fb-item {
   background: url(/contacts/style/images/f_logo.png) no-repeat 0 calc(50% + 0.5rem) / 3rem;
+}
+
+html[dir=rtl] #view-settings [data-type="list"] .fb-item {
+  background: url(/contacts/style/images/f_logo.png) no-repeat scroll 100% calc(50% + 0.5rem) / 3rem auto;
 }
 
 #view-settings [data-type="list"] .fb-item p:first-of-type {
@@ -476,11 +488,25 @@ gaia-header [data-icon] {
   pointer-events: none;
   position: absolute;
   top: 1rem;
+}
+
+html[dir=rtl] #view-settings [data-type="list"] .fb-item aside {
+  left: 0;
+}
+
+html[dir=ltr] #view-settings [data-type="list"] .fb-item aside {
   right: 0;
 }
 
 #view-settings [data-type="list"] .fb-item aside label {
   position: absolute;
+}
+
+html[dir=rtl] #view-settings [data-type="list"] .fb-item aside label {
+  left: 0;
+}
+
+html[dir=ltr] #view-settings [data-type="list"] .fb-item aside label {
   right: 0;
 }
 
@@ -542,7 +568,10 @@ gaia-header [data-icon] {
 
 /* Extending BB buttons Icons at left side*/
 #view-settings [data-type="list"] li button.icon {
-  padding: 1.2rem 1.3rem 1.2rem 4rem;
+  padding-top: 1.2rem;
+  padding-bottom: 1.2rem;
+  -moz-padding-end: 1.3rem;
+  -moz-padding-start: 4rem;
 }
 
 #view-settings [data-type="list"] li button.icon:before {
@@ -555,7 +584,10 @@ gaia-header [data-icon] {
 }
 
 #import-settings [data-type="list"] li button.icon {
-  padding: 1rem 1.3rem 1rem 4rem;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+  -moz-padding-end: 1.3rem;
+  -moz-padding-start: 4rem;
 }
 
 #import-settings [data-type="list"] li button.icon:before {
@@ -743,7 +775,7 @@ gaia-header [data-icon] {
 }
 
 .group-section {
-  padding-left: 1.5rem;
+  -moz-padding-start: 1.5rem;
 }
 
 .datetime {
@@ -830,16 +862,6 @@ form[role="dialog"][data-type="edit"].contacts-select:not(.insearchmode) gaia-he
   image-rendering: auto;
 }
 
-html[dir="rtl"] #no-contacts .icon {
-  padding-right: 3.5rem;
-  padding-left: 0;
-}
-
-html[dir="rtl"] #no-contacts .create.icon,
-html[dir="rtl"] #no-contacts .import.icon {
-  background-position: 100% 50%;
-}
-
 nav[data-type="scrollbar"] li .pack-icon-ice {
   width: 1.2rem;
   height: 1.2rem;
@@ -847,16 +869,6 @@ nav[data-type="scrollbar"] li .pack-icon-ice {
   vertical-align: middle;
   background: transparent no-repeat center center / 1.2rem;
   background-image: url("/contacts/style/images/ice_small.png");
-}
-
-html[dir="rtl"] #no-contacts .icon {
-  padding-right: 3.5rem;
-  padding-left: 0;
-}
-
-html[dir="rtl"] #no-contacts .create.icon,
-html[dir="rtl"] #no-contacts .import.icon {
-  background-position: 100% 50%;
 }
 
 fieldset legend {
@@ -884,7 +896,10 @@ form[role="combobox"] span[data-field="type"] {
 
 .img-delete-button {
   padding: 0;
-  margin: 0.2rem 1rem 0 0.2rem;
+  margin: 0;
+  margin-top: 0.2rem;
+  -moz-margin-start: 0.2rem;
+  -moz-margin-end: 1rem;
   width: 2.8rem;
   color: #fff;
   background: url('images/icon_remove.png') no-repeat scroll 0 0 / 3rem auto transparent;
@@ -913,7 +928,7 @@ form[role="combobox"] span[data-field="type"] {
   color: #5f5f5f;
   height: 5rem;
   vertical-align: middle;
-  padding-left: 4rem;
+  -moz-padding-start: 4rem;
   margin: 0;
 }
 
@@ -1002,4 +1017,101 @@ form[role="combobox"] span[data-field="type"] {
 li button[data-field-type]:active {
   background: transparent;
   color: #5F5F5F;
+}
+
+/* Ellipsis fix for contact lists */
+/*we hijack the overflow and text-overflow
+ * of the shared style to make the ellipsis display always at the end
+ * (ie right for LTR string and left for RTL string)
+ * while keeping alignment of the current system-wide language */
+[data-type="list"] li.contact-item bdi,
+li button.icon-email bdi {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+  max-width: 100%;
+}
+
+/* RTL View */
+
+html[dir="rtl"] .field-template {
+  border-radius: 0 15px 0 0;
+}
+
+html[dir="rtl"] #no-contacts .icon {
+  padding-right: 3.5rem;
+  padding-left: 0;
+}
+
+html[dir="rtl"] #no-contacts .create.icon,
+html[dir="rtl"] #no-contacts .import.icon {
+  background-position: 100% 50%;
+}
+
+html[dir="rtl"] #contact-form div.with-overflow button[type="reset"] {
+  left: calc(-0.5rem + -0.3rem);
+  right: unset;
+}
+
+html[dir="rtl"] #view-settings [data-type="list"] .fb-item aside {
+  left: 0;
+  right: unset;
+}
+
+html[dir="rtl"] #view-settings [data-type="list"] .fb-item {
+  background-position: 100% calc(50% + 0.5rem);
+}
+
+html[dir="rtl"] #view-settings [data-type="list"] .fb-item aside label {
+  left: 0;
+  right: unset;
+}
+
+html[dir="rtl"] #view-settings [data-type="list"] li button.icon:before {
+  left: auto;
+  right: 0.5rem;
+}
+
+html[dir="rtl"] .img-delete-button {
+  background-position: 100% 0;
+}
+
+html[dir="rtl"] #import-settings [data-type="list"] li button.icon:before {
+  left: auto;
+  right: 0.5rem;
+}
+
+/* RTL View */
+html[dir="rtl"] nav[data-type="scrollbar"] {
+  direction: ltr;
+  right: 0;
+  left: unset;
+}
+
+html[dir="rtl"] nav[data-type="scrollbar"] p {
+  left: unset;
+  right: 10rem;
+}
+
+/* TODO: Remove this workaround once bug 883884 fixed */
+.ellipsis-dir-fix {
+  display: block;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+/* Overwrite input-areas bb */
+#custom-tag-reset {
+  right: 1rem;
+}
+
+html[dir="rtl"] #custom-tag-reset {
+  left: 1rem;
+  right: unset;
+}
+
+#multiple-select-view aside {
+  border-bottom: 0.1rem solid #FFFFFF;
+  margin-right: 0;
+  padding-right: 1.5rem;
 }

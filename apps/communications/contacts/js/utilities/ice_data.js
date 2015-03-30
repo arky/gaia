@@ -1,4 +1,6 @@
 'use strict';
+
+/* global Cache */
 /* global ICEStore */
 
 /**
@@ -17,6 +19,8 @@
   var ICE_CONTACTS_KEY = 'ice-contacts';
   var onChangeCallbacks = [];
   var onChangeAttached = false;
+  var pendingChanges = [];
+  var performingChange = false;
 
   /**
    * Loads the local formated data into an internal
@@ -60,6 +64,8 @@
    */
   function setICEContact(id, pos, active) {
     active = active || false;
+
+    Cache.evict();
 
     // Save locally
     localIceContacts[pos] = {
@@ -192,21 +198,42 @@
     });
 
     if (!contact) {
-      return;
+      return Promise.resolve();
     }
 
     // If it's a delete update all the storages
     if (evt.detail.reason === 'remove') {
-      removeICEContact(contact.id);
+      return removeICEContact(contact.id);
     } else {
       notifyCallbacks(localIceContacts);
+      return Promise.resolve();
     }
   }
 
   function onChangeEvent(evt) {
     // We should refresh the iceContacts before determining if it is necessary
     // to notify or not
-    var callback = () => handleChangeEvent(evt);
+    pendingChanges.push(evt);
+    if (!performingChange) {
+      performChange();
+    }
+  }
+
+  // We perform any change sequentially to avoid any race condition while
+  // saving to disc the ICE state.
+  function performChange() {
+    performingChange = true;
+    var evt = pendingChanges.pop();
+
+    if (!evt) {
+      performingChange = false;
+      return;
+    }
+
+    function callback() {
+      handleChangeEvent(evt).then(performChange);
+    }
+
     load().then(callback, callback);
   }
 

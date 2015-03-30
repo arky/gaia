@@ -9,6 +9,12 @@ require.config({
     'settings': {
       exports: 'Settings'
     },
+    'dsds_settings': {
+      exports: 'DsdsSettings'
+    },
+    'simcard_lock': {
+      exports: 'SimPinLock'
+    },
     'shared/apn_helper': {
       exports: 'ApnHelper'
     },
@@ -27,6 +33,9 @@ require.config({
     },
     'shared/lazy_loader': {
       exports: 'LazyLoader'
+    },
+    'shared/search_provider': {
+      exports: 'SearchProvider'
     },
     'shared/manifest_helper': {
       exports: 'ManifestHelper'
@@ -53,7 +62,8 @@ require.config({
       exports: 'SimSettingsHelper'
     },
     'shared/tz_select': {
-      exports: 'tzSelect'
+      exports: 'tzSelect',
+      deps: ['shared/icc_helper']
     },
     'shared/wifi_helper': {
       exports: 'WifiHelper'
@@ -79,6 +89,12 @@ require.config({
     },
     'shared/airplane_mode_helper': {
       exports: 'AirplaneModeHelper'
+    },
+    'shared/homescreens/vertical_preferences': {
+      exports: 'verticalPreferences'
+    },
+    'shared/stk_helper': {
+      exports: 'STKHelper'
     }
   },
   modules: [
@@ -191,12 +207,6 @@ require.config({
       ]
     },
     {
-      name: 'panels/keyboard_enabled_default/dialog',
-      exclude: [
-        'main'
-      ]
-    },
-    {
       name: 'panels/app_storage/panel',
       exclude: [
         'main',
@@ -207,8 +217,7 @@ require.config({
       name: 'panels/wifi/panel',
       exclude: [
         'main',
-        'modules/dialog_service',
-        'modules/settings_utils'
+        'modules/dialog_service'
       ]
     },
     {
@@ -234,7 +243,7 @@ require.config({
       name: 'panels/wifi_manage_networks/panel',
       exclude: [
         'main',
-        'modules/settings_utils'
+        'modules/dialog_service'
       ]
     },
     {
@@ -326,8 +335,31 @@ require.config({
         'main',
         'modules/bluetooth/version_detector',
         'modules/bluetooth/bluetooth_v1',
-        'modules/bluetooth/bluetooth'
+        'modules/bluetooth/bluetooth_context'
       ]
+    },
+    {
+      name: 'panels/developer/panel',
+      exclude: [
+        'main',
+        'modules/dialog_service',
+        'modules/apps_cache'
+      ]
+    },
+    {
+      name: 'panels/developer_hud/panel',
+      exclude: ['main']
+    },
+    {
+      name: 'panels/call_barring/panel',
+      exclude: [
+        'main',
+        'modules/mvvm/observable'
+      ]
+    },
+    {
+      name: 'panels/call_barring_passcode_change/panel',
+      exclude: ['main']
     }
   ]
 });

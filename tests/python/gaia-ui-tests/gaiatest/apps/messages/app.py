@@ -2,9 +2,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from marionette import expected
-from marionette import Wait
-from marionette.by import By
+from marionette_driver import expected, By, Wait
+
 from gaiatest.apps.base import Base
 from gaiatest.apps.base import PageRegion
 
@@ -13,10 +12,10 @@ class Messages(Base):
 
     name = 'Messages'
 
-    _create_new_message_locator = (By.ID, 'icon-add')
+    _create_new_message_locator = (By.ID, 'threads-composer-link')
     _first_message_locator = (By.ID, 'thread-1')
     _messages_frame_locator = (By.CSS_SELECTOR, 'iframe[data-url*=sms]')
-    _options_icon_locator = (By.ID, 'threads-options-icon')
+    _settings_icon_locator = (By.ID, 'threads-settings-button')
     _app_ready_locator = (By.CLASS_NAME, 'js-app-ready')
     _draft_message_locator = (By.CSS_SELECTOR, 'li.draft')
 
@@ -31,10 +30,12 @@ class Messages(Base):
         from gaiatest.apps.messages.regions.new_message import NewMessage
         return NewMessage(self.marionette)
 
-    def tap_options(self):
-        self.marionette.find_element(*self._options_icon_locator).tap()
-        from gaiatest.apps.messages.regions.activities import Activities
-        return Activities(self.marionette)
+    def tap_settings(self):
+        self.marionette.find_element(*self._settings_icon_locator).tap()
+        Wait(self.marionette).until(lambda m: self.apps.displayed_app.name == 'Settings')
+        self.apps.switch_to_displayed_app()
+        from gaiatest.apps.messages.regions.messaging_settings import MessagingSettings
+        return MessagingSettings(self.marionette)
 
     def wait_for_message_list(self):
         Wait(self.marionette).until(expected.element_displayed(

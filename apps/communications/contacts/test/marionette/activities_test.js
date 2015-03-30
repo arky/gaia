@@ -29,20 +29,11 @@ marionette('Contacts > Activities', function() {
   });
 
   suite('open text/vcard activity', function() {
-    var testObject = {};
-
     function assertFormData() {
-      for (var key in testObject) {
-        var value = client.findElement(key).getAttribute('value');
-        assert.equal(value, testObject[key]);
-      }
-    }
-
-    setup(function() {
-      var selectorsArray = [
-        selectors.formGivenName, 
-        selectors.formFamilyName, 
-        selectors.formOrg, 
+      var formSelectors = [
+        selectors.formGivenName,
+        selectors.formFamilyName,
+        selectors.formOrg,
         selectors.formTel,
         selectors.formEmailFirst
       ];
@@ -55,14 +46,23 @@ marionette('Contacts > Activities', function() {
         'forrestgump@example.com'
       ];
 
+      var testObject = {};
+
       for (var i = 0, len = dataArray.length; i < len; i++) {
-        testObject[selectorsArray[i]] = dataArray[i];
+        testObject[formSelectors[i]] = dataArray[i];
       }
+
+      for (var key in testObject) {
+        var value = client.findElement(key).getAttribute('value');
+        assert.equal(value, testObject[key]);
+      }
+    }
+
+    setup(function() {
+      smsSubject.launch(); // We open some app to start a Marionette session.
     });
 
     test('open text/vcard activity opens form filled', function() {
-      smsSubject.launch(); // We open some app to start a Marionette session.
-
       client.executeScript(function(vCardFile) {
         new MozActivity({
           name: 'open',
@@ -79,6 +79,7 @@ marionette('Contacts > Activities', function() {
       client.helper.waitForElement(selectors.form);
 
       assertFormData();
+      assert.ok(client.findElement(selectors.formSave).enabled);
     });
   });
 
@@ -151,7 +152,7 @@ marionette('Contacts > Activities', function() {
       var confirmMsg = client.findElement(selectors.confirmBody);
       var expectedResult = subject.l10n(
         '/locales-obj/en-US.json',
-        'noContactsActivity');
+        'noContactsActivity2');
       assert.equal(confirmMsg.text(), expectedResult);
     });
 
@@ -190,6 +191,45 @@ marionette('Contacts > Activities', function() {
         '/locales-obj/en-US.json',
         'no_contact_phones');
       assert.equal(confirmText, expectedResult);
+    });
+  });
+
+  suite('webcontacts/email activity', function() {
+    test('Creates only one instance of action menu', function() {
+      subject.launch();
+
+      subject.addContactMultipleEmails({
+        givenName: 'From Contacts App',
+        emailFirst: 'first@personal.com',
+        emailSecond: 'second@personal.com'
+      });
+
+      client.apps.close(Contacts.URL, 'contacts');
+
+      smsSubject.launch();
+
+      client.executeScript(function() {
+        new MozActivity({
+          name: 'pick',
+          data: {
+            type: 'webcontacts/email'
+          }
+        });
+      });
+
+      client.switchToFrame();
+      client.apps.switchToApp(Contacts.URL, 'contacts');
+      client.helper.waitForElement(selectors.bodyReady);
+
+      var contact = client.helper.waitForElement(selectors.listContactFirst);
+
+      // Simulate two clicks
+      contact.click();
+      contact.click();
+
+      var emailList = client.helper.waitForElement(selectors.actionMenuList);
+      var emailChildren = emailList.findElements('button');
+      assert.equal(emailChildren.length, 3);
     });
   });
 });

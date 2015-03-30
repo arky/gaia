@@ -1,17 +1,19 @@
 'use strict';
 
 /* global MocksHelper, InputWindowManager, MockKeyboardManager, MockPromise,
-   InputWindow, MockSettingsListener */
+   InputWindow, MockSettingsListener, MockService */
 
 require('/shared/test/unit/mocks/mock_custom_event.js');
 require('/shared/test/unit/mocks/mock_settings_listener.js');
 require('/shared/test/unit/mocks/mock_promise.js');
 require('/test/unit/mock_orientation_manager.js');
+require('/shared/test/unit/mocks/mock_service.js');
 require('/test/unit/mock_keyboard_manager.js');
 require('/js/input_window_manager.js');
 
 var mocksForInputWindowManager = new MocksHelper([
-  'OrientationManager', 'SettingsListener', 'KeyboardManager', 'CustomEvent'
+  'OrientationManager', 'SettingsListener', 'KeyboardManager', 'CustomEvent',
+  'Service'
 ]).init();
 
 suite('InputWindowManager', function() {
@@ -207,26 +209,43 @@ suite('InputWindowManager', function() {
         };
       });
 
-      test('Send keyboardhidden if there is no currentWindow', function() {
+      suite('inputWindow._pendingReady = false', function() {
+        setup(function() {
+          evt.detail._pendingReady = false;
+        });
+        test('Send keyboardhidden if there is no currentWindow', function() {
+          manager._currentWindow = undefined;
+
+          manager.handleEvent(evt);
+
+          assert.isTrue(stubKBPublish.calledWith('keyboardhidden', undefined));
+        });
+
+        test('Do not send keyboardhidden if there is currentWindow',
+        function() {
+          manager._currentWindow = new InputWindow();
+
+          manager.handleEvent(evt);
+
+          assert.isFalse(stubKBPublish.called);
+        });
+
+        test('Source InputWindow is deactivated', function() {
+          manager.handleEvent(evt);
+
+          assert.isTrue(evt.detail._setAsActiveInput.calledWith(false));
+        });
+      });
+
+      test('inputWindow._pendingReady = true -- should not do anything',
+      function() {
+        evt.detail._pendingReady = true;
         manager._currentWindow = undefined;
 
         manager.handleEvent(evt);
 
-        assert.isTrue(stubKBPublish.calledWith('keyboardhidden', undefined));
-      });
-
-      test('Do not send keyboardhidden if there is currentWindow', function() {
-        manager._currentWindow = new InputWindow();
-
-        manager.handleEvent(evt);
-
+        assert.isFalse(evt.detail._setAsActiveInput.called);
         assert.isFalse(stubKBPublish.called);
-      });
-
-      test('Source InputWindow is deactivated', function() {
-        manager.handleEvent(evt);
-
-        assert.isTrue(evt.detail._setAsActiveInput.calledWith(false));
       });
     });
 
@@ -310,6 +329,10 @@ suite('InputWindowManager', function() {
         navigator.mozInputMethod = {
           removeFocus: this.sinon.stub()
         };
+
+        MockService.currentApp = {
+          blur: this.sinon.stub()
+        };
       });
 
       teardown(function() {
@@ -324,6 +347,7 @@ suite('InputWindowManager', function() {
           manager.handleEvent(new CustomEvent(evtType));
 
           assert.isFalse(navigator.mozInputMethod.removeFocus.called);
+          assert.isFalse(MockService.currentApp.blur.called);
         });
 
         test(evtType + ' remove focus if there is active keyboard', function() {
@@ -332,10 +356,12 @@ suite('InputWindowManager', function() {
           manager.handleEvent(new CustomEvent(evtType));
 
           assert.isTrue(navigator.mozInputMethod.removeFocus.called);
+          assert.isTrue(MockService.currentApp.blur.called);
         });
       };
 
-      ['lockscreen-appopened', 'sheets-gesture-begin'].forEach(evtType => {
+      ['lockscreen-appopened', 'sheets-gesture-begin',
+        'cardviewbeforeshow'].forEach(evtType => {
         testForRemoveFocus(evtType);
       });
     });
@@ -445,8 +471,10 @@ suite('InputWindowManager', function() {
     var stubRemoveInputApp = this.sinon.stub(manager, '_removeInputApp');
 
     // removed apps do not include current window
-    manager._onInputLayoutsRemoved(manifestURLs1);
+    var ret = manager._onInputLayoutsRemoved(manifestURLs1);
     assert.isFalse(stubHideInputWindow.called);
+
+    assert.isFalse(ret, 'should return false as no currentWindow hid');
 
     manifestURLs1.forEach(manifestURL => {
       assert.isTrue(stubRemoveInputApp.calledWith(manifestURL),
@@ -454,8 +482,10 @@ suite('InputWindowManager', function() {
     });
 
     // removed apps include current window
-    manager._onInputLayoutsRemoved(manifestURLs2);
+    ret = manager._onInputLayoutsRemoved(manifestURLs2);
     assert.isTrue(stubHideInputWindow.calledOnce);
+
+    assert.isTrue(ret, 'should return true as some currentWindow hid');
 
     manifestURLs1.forEach(manifestURL => {
       assert.isTrue(stubRemoveInputApp.calledWith(manifestURL),

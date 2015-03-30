@@ -2,12 +2,11 @@
 'use strict';
 
 var assert = require('assert');
-var Actions = require('marionette-client').Actions;
 
 function Music(client, origin) {
   this.client = client;
   this.origin = origin || ('app://' + Music.DEFAULT_ORIGIN);
-  this.actions = new Actions(client);
+  this.actions = client.loader.getActions();
 }
 
 module.exports = Music;
@@ -17,6 +16,7 @@ Music.DEFAULT_ORIGIN = 'music.gaiamobile.org';
 Music.Selector = Object.freeze({
   messageOverlay: '#overlay',
   firstTile: '.tile',
+  playlistsTab: '#tabs-playlists',
   artistsTab: '#tabs-artists',
   songsTab: '#tabs-songs',
   albumsTab: '#tabs-albums',
@@ -31,13 +31,18 @@ Music.Selector = Object.freeze({
   searchArtists: '#views-search-artists',
   searchAlbums: '#views-search-albums',
   searchTitles: '#views-search-titles',
+  searchNoResult: '#views-search-no-result',
 
   viewsList: '#views-list-anchor',
   viewsSublist: '#views-sublist-anchor',
+  firstListItem: '.list-item',
   firstSong: '.list-item',
+  firstSongSublist: '#views-sublist .list-item',
   playButton: '#player-controls-play',
   progressBar: '#player-seek-bar-progress',
   shareButton: '#player-cover-share',
+  ratingBar: '#player-album-rating',
+  ratingStarsOn: 'button.star-on',
   shareMenu: 'form[data-z-index-level="action-menu"]',
   pickDoneButton: '#title-done',
   header: '#title',
@@ -53,6 +58,10 @@ Music.prototype = {
 
   get firstTile() {
     return this.client.findElement(Music.Selector.firstTile);
+  },
+
+  get playlistsTab() {
+    return this.client.helper.waitForElement(Music.Selector.playlistsTab);
   },
 
   get artistsTab() {
@@ -71,10 +80,28 @@ Music.prototype = {
     return this.client.helper.waitForElement(Music.Selector.firstSong);
   },
 
+  get firstSongSublist() {
+    return this.client.helper.waitForElement(Music.Selector.firstSongSublist);
+  },
+
   get songs() {
     this.waitForSublist();
 
     var list = this.client.findElement(Music.Selector.viewsSublist);
+    assert.ok(list);
+
+    var list_items = list.findElements('li.list-item', 'css selector');
+    assert.ok(list_items);
+
+    return list_items;
+  },
+
+  get firstListItem() {
+    return this.client.helper.waitForElement(Music.Selector.firstListItem);
+  },
+
+  get listItems() {
+    var list = this.client.helper.waitForElement(Music.Selector.viewsList);
     assert.ok(list);
 
     var list_items = list.findElements('li.list-item', 'css selector');
@@ -129,6 +156,10 @@ Music.prototype = {
     this.client.helper.waitForElement('body');
   },
 
+  close: function() {
+    this.client.apps.close(this.origin);
+  },
+
   switchToMe: function(options) {
     options = options || {};
 
@@ -146,8 +177,16 @@ Music.prototype = {
     }
   },
 
+  waitFinishedScanning: function() {
+    this.client.waitFor(function() {
+      return this.client.executeScript(function() {
+        return window.wrappedJSObject.musicdb.scanning === false;
+      });
+    }.bind(this));
+  },
+
   waitForFirstTile: function() {
-    this.client.helper.waitForElement(this.firstTile);
+    this.client.helper.waitForElement(Music.Selector.firstTile);
   },
 
   waitForMessageOverlayShown: function(shouldBeShown) {
@@ -214,12 +253,12 @@ Music.prototype = {
     this.albumsTab.tap();
   },
 
-  selectAlbum: function(name) {
-    var list = this.client.helper.waitForElement(Music.Selector.viewsList);
-    assert.ok(list);
+  switchToPlaylistsView: function() {
+    this.playlistsTab.tap();
+  },
 
-    var list_items = list.findElements('li.list-item', 'css selector');
-    assert.ok(list_items);
+  selectAlbum: function(name) {
+    var list_items = this.listItems;
 
     list_items.filter(function (element) {
       return element.findElement('span.list-main-title', 'css selector')
@@ -227,8 +266,32 @@ Music.prototype = {
     })[0].tap();
   },
 
+  selectArtist: function(name) {
+    var list_items = this.listItems;
+
+    list_items.filter(function (element) {
+      return element.findElement('span.list-single-title', 'css selector')
+        .text() === name;
+    })[0].tap();
+  },
+
+  selectPlaylist: function(name) {
+    var list_items = this.listItems;
+
+    list_items.filter(function (element) {
+      return element.findElement('span.list-playlist-title', 'css selector')
+        .text() === name;
+    })[0].tap();
+  },
+
+  // only from a list (song list)
   playFirstSong: function() {
     this.firstSong.click();
+  },
+
+  // only from a sublist (artist, albums, playlists)
+  playFirstSongSublist: function() {
+    this.firstSongSublist.click();
   },
 
   tapPlayButton: function() {
@@ -237,6 +300,12 @@ Music.prototype = {
 
   tapHeaderActionButton: function() {
     this.header.tap(25, 25);
+  },
+
+  tapRating: function(rating) {
+    this.client.helper.waitForElement(Music.Selector.coverImage).click();
+    this.client.helper.waitForElement('button.rating-star[data-rating="' +
+                                      rating + '"]').tap();
   },
 
   shareWith: function(appName) {

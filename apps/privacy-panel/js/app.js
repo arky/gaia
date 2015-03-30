@@ -21,8 +21,8 @@ require.config({
     'shared/async_storage': {
       exports: 'asyncStorage'
     },
-    'shared/l10n': {
-      exports: 'navigator.mozL10n'
+    'shared/manifest_helper': {
+      exports: 'ManifestHelper'
     }
   }
 });
@@ -50,7 +50,6 @@ require([
   'panels',
   'root/main',
   'about/main',
-  'shared/l10n'
 ],
 
 function(panels, root, about) {
@@ -64,19 +63,25 @@ function(panels, root, about) {
 
   require([
     'ala/main',
-    'rpp/main',
+    'rp/main',
+    'tc/main',
     'sms/main'
   ],
 
-  function(ala, rpp, commands) {
+  function(ala, rp, tc, commands) {
     // load all templates for location accuracy sections
     panels.load('ala', function() {
       ala.init();
     });
 
     // load all templates for remote privacy sections
-    panels.load('rpp', function() {
-      rpp.init();
+    panels.load('rp', function() {
+      rp.init();
+    });
+
+    // load all templates for transparency control
+    panels.load('tc', function() {
+      tc.init();
     });
 
     commands.init();

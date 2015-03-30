@@ -1,17 +1,26 @@
 'use strict';
-/* global ActionMenu, Event, MockL10n */
+/* global ActionMenu, Event, MockL10n, MockService */
 
 require('/shared/test/unit/load_body_html_helper.js');
 requireApp('system/js/action_menu.js');
 require('/shared/test/unit/mocks/mock_l10n.js');
+requireApp('system/shared/test/unit/mocks/mock_service.js');
 
 suite('ActionMenu', function() {
-  var activitiesMockup, realL10n, genericActionsMockup;
+  var activitiesMockup, realL10n, genericActionsMockup, rafStub, realService;
   var iconUrl = 'images/icon.png', title = 'Title';
   var screenElement;
 
   function getMenu() {
     return screenElement.querySelector('[data-type="action"]');
+  }
+
+  function resetHTML() {
+    document.body.innerHTML = '';
+    loadBodyHTML('/index.html');
+    screenElement = document.getElementById('screen');
+    // reload too in case is on memory
+    getMenu();
   }
 
   suiteSetup(function() {
@@ -46,17 +55,28 @@ suite('ActionMenu', function() {
 
     realL10n = navigator.mozL10n;
     navigator.mozL10n = MockL10n;
-    loadBodyHTML('/index.html');
-    screenElement = document.getElementById('screen');
+
+    realService = window.Service;
+    window.Service = MockService;
+
+    rafStub = sinon.stub(window, 'requestAnimationFrame',
+                         function(callback) { callback(); });
+
+    resetHTML();
   });
 
   suiteTeardown(function() {
+    rafStub.restore();
     navigator.mozL10n = realL10n;
+    window.Service = realService;
     document.body.innerHTML = '';
   });
 
-
   suite(' > Structure & Basic methods', function() {
+    setup(function() {
+      resetHTML();
+    });
+
     test(' > init', function() {
       // We must have *only* one action menu in system
       var menu = new ActionMenu(genericActionsMockup, title);
@@ -122,8 +142,12 @@ suite('ActionMenu', function() {
     test(' > open > show', function() {
       // Call to show activities
       var menu = new ActionMenu(activitiesMockup, title);
+      sinon.stub(menu, 'publish');
       menu.start();
       assert.ok(getMenu().classList.contains('visible'));
+      assert.isTrue(menu.active);
+      assert.isTrue(menu.isActive());
+      assert.isTrue(menu.publish.calledWith('-activated'));
       assert.isTrue(screenElement.classList.contains('action-menu'));
       menu.stop();
     });
@@ -131,16 +155,20 @@ suite('ActionMenu', function() {
     test(' > open > hide', function() {
       // Call to show activities
       var menu = new ActionMenu(activitiesMockup, title);
+      sinon.stub(menu, 'publish');
       menu.start();
       // Hide. Calls stop
       var stub = this.sinon.stub(menu, 'stop');
       menu.hide();
+      assert.isFalse(menu.active);
+      assert.isFalse(menu.isActive());
+      assert.isTrue(menu.publish.calledWith('-deactivated'));
+      getMenu().dispatchEvent(new CustomEvent('transitionend'));
       assert.ok(stub.calledOnce);
       stub.restore();
       menu.stop();
       assert.isFalse(screenElement.classList.contains('action-menu'));
     });
-
   });
 
   suite(' > handleEvent', function() {
@@ -148,6 +176,7 @@ suite('ActionMenu', function() {
     var menu;
 
     setup(function() {
+      resetHTML();
       menu = new ActionMenu(activitiesMockup, title);
       menu.start();
       this.sinon.spy(menu, 'handleEvent');
@@ -179,6 +208,7 @@ suite('ActionMenu', function() {
     var menu;
 
     setup(function() {
+      resetHTML();
       successCBStub = this.sinon.spy();
       cancelCBStub = this.sinon.spy();
       menu = new ActionMenu(
@@ -215,7 +245,32 @@ suite('ActionMenu', function() {
     });
   });
 
+  suite(' > publish', function() {
+    var menu, originalDispatchEvent, eventName = '-test_event';
+
+    setup(function() {
+      resetHTML();
+      originalDispatchEvent = window.dispatchEvent;
+      menu = new ActionMenu(activitiesMockup, title);
+      sinon.spy(window, 'dispatchEvent');
+    });
+
+    teardown(function() {
+      window.dispatchEvent = originalDispatchEvent;
+    });
+
+    test('action menu prefix added', function() {
+      menu.publish(eventName);
+      assert.equal(window.dispatchEvent.args[0][0].type,
+        menu.EVENT_PREFIX + eventName);
+    });
+  });
+
   suite('preventFocusChange', function() {
+    setup(function() {
+      resetHTML();
+    });
+
     test('focus is not changed when specified', function() {
       var menu = new ActionMenu(genericActionsMockup, title, null, null, true);
       this.sinon.spy(menu, 'preventFocusChange');
@@ -223,6 +278,23 @@ suite('ActionMenu', function() {
       menu.menu.dispatchEvent(new CustomEvent('mousedown',
         { bubbles: true, cancelable: true }));
       assert.isTrue(menu.preventFocusChange.called);
+    });
+  });
+
+  suite('askForDefaultChoice option', function() {
+    var menu;
+
+    setup(function() {
+      resetHTML();
+      menu = new ActionMenu(
+        genericActionsMockup, title, null, null, null, true);
+      menu.start();
+      this.sinon.spy(menu, 'hide');
+    });
+
+    test('checkbox is created', function() {
+      var checkbox = getMenu().querySelectorAll('.pack-checkbox');
+      assert.equal(checkbox.length, 1);
     });
   });
 });

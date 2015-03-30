@@ -18,13 +18,11 @@ endef
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 
 define run-js-command
-  $(XULRUNNERSDK) $(XPCSHELLSDK) \
+  $(2) $(XULRUNNERSDK) $(XPCSHELLSDK) \
     -f "$(GAIA_DIR)$(SEP)build$(SEP)xpcshell-commonjs.js" \
     -e "run('$(strip $1)');"
 endef
 
 define run-node-command
-  echo "run-node-command $1";
-  node --harmony -e \
-  "require('./build/$(strip $1).js').execute($(BUILD_CONFIG))"
+  node --harmony -e "require('./build/$(strip $1).js').execute($(BUILD_CONFIG))"
 endef

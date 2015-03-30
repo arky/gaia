@@ -4,9 +4,7 @@
 
 import time
 
-from marionette import expected
-from marionette import Wait
-from marionette.by import By
+from marionette_driver import expected, By, Wait
 from gaiatest.apps.base import Base
 from gaiatest.apps.cost_control.regions.ftu_step2 import FTUStep2
 

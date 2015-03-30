@@ -255,6 +255,56 @@ suite('controllers/viewfinder', function() {
     });
   });
 
+  suite('ViewfinderController#onSettingsOpened()', function() {
+    setup(function() {
+      sinon.spy(this.controller, 'hideGrid');
+      this.controller.onSettingsOpened();
+    });
+
+    test('Hide grid and hide viewfinder view from the screen reader',
+      function() {
+        sinon.assert.called(this.controller.hideGrid);
+        assert.isTrue(this.viewfinder.set.calledWith('ariaHidden', true));
+      });
+  });
+
+  suite('ViewfinderController#onSettingsClosed()', function() {
+    setup(function() {
+      sinon.spy(this.controller, 'configureGrid');
+      this.controller.onSettingsClosed();
+    });
+
+    test('Configure grid and show viewfinder view to the screen reader',
+      function() {
+        sinon.assert.called(this.controller.configureGrid);
+        assert.isTrue(this.viewfinder.set.calledWith('ariaHidden', false));
+      });
+  });
+
+  suite('ViewfinderController#onGalleryOpened()', function() {
+    setup(function() {
+      this.controller.onGalleryOpened();
+    });
+
+    test('When gallery is open, the viewfinder view should be disabled and ' +
+      'hidden from screen reader', function() {
+      sinon.assert.called(this.viewfinder.disable);
+      assert.isTrue(this.viewfinder.set.calledWith('ariaHidden', true));
+    });
+  });
+
+  suite('ViewfinderController#onGalleryClosed()', function() {
+    setup(function() {
+      this.controller.onGalleryClosed();
+    });
+
+    test('When gallery is closed, the viewfinder view should be enabled and ' +
+      'visible to screen reader', function() {
+      sinon.assert.called(this.viewfinder.enable);
+      assert.isTrue(this.viewfinder.set.calledWith('ariaHidden', false));
+    });
+  });
+
   suite('click:viewfinder', function() {
     test('Should set the grid depending on the setting', function() {
       this.app.settings.grid.selected.withArgs('key').returns('on');

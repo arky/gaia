@@ -29,21 +29,36 @@ html, body {
   Override BB. Some CSS tweaks for having a better confirm readability
 */
 form[role="dialog"][data-type="confirm"] p {
-  margin-top: 0 !important;
-  border-bottom: 0.1rem solid #686868;
+  white-space: pre-line;
 }
 
-form[role="dialog"][data-type="confirm"] p small {
-  line-height: 2rem;
+form[role="dialog"].error-dialog-show-recipient ul {
+  border: none;
 }
 
-form[data-type="confirm"] .phone-details .phone-number {
-  display: inline;
+form[role="dialog"].error-dialog-show-recipient ul li {
+  padding: 0;
+}
+
+/* This does not override the building block, that's why we use a shorter
+ * selector */
+.error-dialog-show-recipient li {
+  /* future-proof in case BB moves to "text-align: start" */
+  width: -moz-fit-content;
+
+  /* List items are phone numbers */
+  direction: ltr;
+  unicode-bidi: -moz-isolate;
 }
 
 gaia-header {
   position: relative;
   z-index: 10;
+}
+
+.group-header-title {
+  display: flex;
+  justify-content: center;
 }
 
 /* Override Building Block [Input areas] styles */
@@ -71,7 +86,6 @@ form[role="dialog"][data-type="edit"] > menu {
 
 #threads-container[data-type="list"] .mms-icon {
   display: none;
-  -moz-margin-start: 0.3rem;
 
   font-size: 1.5rem;
   color: #ff6622;
@@ -79,6 +93,14 @@ form[role="dialog"][data-type="edit"] > menu {
 
 #threads-container[data-type="list"] [data-last-message-type="mms"] .mms-icon {
   display: inline;
+}
+
+.edit .bottom-tab[role="region"] {
+  visibility: visible;
+}
+
+.bottom-tab[role="region"] {
+  visibility: hidden;
 }
 
 #threads-container[data-type="list"] [data-last-message-type="mms"] .body-text {
@@ -122,7 +144,7 @@ form[role="dialog"][data-type="edit"] > menu {
 }
 
 .edit #threads-container[data-type="list"] {
-  height: calc(100% - 12rem);
+  height: calc(100% - 10rem);
 }
 
 #threads-container[data-type="list"] header {
@@ -174,6 +196,30 @@ form[role="dialog"][data-type="edit"] > menu {
   font-size: 2.5rem;
 }
 
+/* Override Building Block Tabs styles */
+form[role="dialog"][data-type="edit"] .bb-tablist:before {
+  bottom: 5.5rem ;
+}
+
+form[role="dialog"][data-type="edit"] .bb-tablist > li {
+  height: 5.5rem ;
+}
+
+.bb-tablist > li button {
+  background-position: 50% 50% ;
+}
+
+.bb-tablist > li button[data-action="delete-button"] {
+  background-image: url("images/icons/delete.png");
+}
+
+.bb-tablist > li button[data-action="mark-as-read"] {
+  background-image: url("images/icons/ico_in_markasread_30x30.png");
+}
+
+.bb-tablist > li button[data-action="mark-as-unread"] {
+  background-image: url("images/icons/ico_in_markasunread_30x30.png");
+}
 
 /**
  * Bug 967878, 979018 -[Messages] Background doesn't
@@ -196,8 +242,7 @@ form[role="dialog"][data-type="edit"] > menu {
 }
 
 [data-type="list"] aside.pack-end {
-  margin: 0;
-  -moz-margin-end: .5rem;
+  margin: 0 .5rem;
 }
 
 [data-type="list"] .unread aside.icon-unread {
@@ -209,6 +254,15 @@ form[role="dialog"][data-type="edit"] > menu {
   pointer-events: none;
 }
 
+[data-type="list"] .summary {
+  display: flex;
+}
+
+/* Override time margin for flex layout */
+[data-type="list"] .summary time {
+  -moz-margin-end: 1rem;
+}
+
 [data-type="list"] .draft .icon-draft {
   background: url("../style/images/draft.png") no-repeat left center / 1.2rem;
   visibility: visible;
@@ -218,7 +272,7 @@ form[role="dialog"][data-type="edit"] > menu {
   opacity: 0.5;
 }
 
-[data-type="list"] .is-draft .name {
+[data-type="list"] .is-draft .threadlist-item-title {
   font-style: italic;
   color: #5f5f5f;
 }
@@ -279,10 +333,6 @@ form[role="dialog"][data-type="edit"] > menu {
   background: #fff;
 }
 
-.panel:first-child {
-  left: 0;
-}
-
 .panel {
   position: absolute;
   left: 100%;
@@ -292,11 +342,15 @@ form[role="dialog"][data-type="edit"] > menu {
   transition: transform 0.4s ease;
 }
 
+.default-panel {
+  left: 0;
+}
+
 #main-wrapper[data-position='left'] .panel {
   transform: translateX(-100%);
 }
 
-#threads-container, #thread-messages {
+#threads-container, #thread-messages, #information-participants, #information-report {
   z-index: 10;
   background: white;
 }
@@ -330,13 +384,13 @@ form[role="dialog"][data-type="edit"] > menu {
   white-space: nowrap;
 }
 
-#messages-new-message-notice > div:first-child {
+#messages-new-message-notice > .text-container {
   flex: auto;
 
   overflow: hidden;
 }
 
-#messages-new-message-notice > div:nth-child(2) {
+#messages-new-message-notice > .button-container {
   flex: none;
 
   padding: 0.2rem;
@@ -377,10 +431,6 @@ section[role="region"].new > gaia-header h1 {
 
   width: 5rem;
   height: 4rem;
-}
-
-section[role="region"].new > header:first-child form {
- display: block;
 }
 
 #messages-contact-pick-button .icon-user {
@@ -510,7 +560,7 @@ section[role="region"].new > header:first-child form {
 */
 
 .edit #messages-container {
-  margin-bottom: 7rem;
+  margin-bottom: 5.5rem;
 }
 
 .edit .article-list[data-type="list"] .message {
@@ -792,8 +842,8 @@ Do not remove.
   max-height: calc(100% - 10.5rem);
 }
 
-#messages-recipient-suggestions li:first-child {
-  margin-top: 0;
+#messages-recipient-suggestions li {
+  pointer-events: auto;
 }
 
 .article-list[data-type="list"] ul.contact-list {
@@ -806,11 +856,13 @@ Do not remove.
   background: #fff;
 }
 
-body[role="application"] form[role="dialog"][data-type="action"] > section:first-child{
-  height: auto;
-  border-bottom: 0.1rem solid #616262;
-  padding-bottom: 1rem;
-  -moz-padding-start: 2.5rem;
+/**
+ * TODO: It's an adjustment for line-height/padding to prevent bottom of chars
+ * been cut. This fix will be moved to shared list.css once Bug 1144588 landed
+ */
+.contact-list .suggestion > .name {
+  line-height: 2.4rem;
+  padding-top: 0.8rem;
 }
 
 form[role="dialog"][data-type="action"].contact-prompt > header {
@@ -836,8 +888,8 @@ form[role="dialog"][data-type="action"].contact-prompt > header {
 }
 
 .contact-header .name {
-  line-height: 2.5rem;
-  padding: 0.5rem 0 0.8rem;
+  line-height: 3.3rem;
+  padding: 0.1rem 0 0.4rem;
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -867,28 +919,8 @@ form[role="dialog"][data-type="action"].contact-prompt > header {
   -moz-margin-end: -1.5rem; /* compensate the header's 3rem padding */
 }
 
-section[role="region"].new .article-list[data-type="list"] li:first-child {
-  margin-top: 4.6rem;
-}
-
-section[role="region"].new .article-list[data-type="list"]  li {
-  pointer-events: auto;
-}
-
 .suggestion * {
   pointer-events: none;
-}
-
-.thread-participant-count {
-  display: none;
-}
-
-/**
- * In RTL mode location of this counter should be changed accordingly, but
- * indicator itself (eg. "(+3)") should be always LTR
- */
-.thread-group-header > .thread-participant-count {
-  display: unset;
 }
 
 .subheader {
@@ -900,7 +932,7 @@ section[role="region"].new .article-list[data-type="list"]  li {
   top: 5rem;
 }
 
-body[role="application"] form[role="dialog"][data-type="action"] > header:first-child{
+form[role="dialog"][data-type="action"] > header {
  text-align: start;
 }
 
@@ -910,23 +942,6 @@ body[role="application"] form[role="dialog"][data-type="action"] > header:first-
 
   width: 5rem;
   height: 4rem;
-}
-
-/**
- * 1. COMPLEX: Scoped style-sheets within <gaia-header>
- * trump all other rules. !important is required
- * for an app to over-ride the default appearance
- * of content within the custom-element. This may
- * change when we get `:host` and `:content` selectors
- * in shadow-dom.
- */
-
-/* Elements related to information view */
-section[role="region"][class*='-information'] #messages-options-button,
-section[role="region"][class*='-information'] #messages-subheader,
-section[role="region"][class*='-information'] #messages-container,
-section[role="region"][class*='-information'] #messages-compose-form {
-  display: none !important; /* 1 */
 }
 
 #messages-back-button:hover {
@@ -939,16 +954,18 @@ section[role="region"][class*='-information'] #messages-compose-form {
 }
 
 /* Phone details label styles */
-.phone-details > .phone-details-item {
+.phone-type,
+.phone-type-separator,
+.phone-carrier,
+.phone-carrier-separator {
   display: none;
 }
 
-.phone-details.has-phone-type > .phone-type,
-.phone-details.has-phone-type > .phone-type-separator,
-.phone-details > .phone-number,
-.phone-details.has-phone-carrier > .phone-carrier,
-.phone-details.has-phone-carrier > .phone-carrier-separator {
-  display: inline;
+.has-phone-type > .phone-type,
+.has-phone-type > .phone-type-separator,
+.has-phone-carrier > .phone-carrier,
+.has-phone-carrier > .phone-carrier-separator {
+  display: unset;
 }
 
 /* RTL View */
@@ -988,11 +1005,11 @@ html[dir="rtl"] .edit #threads-container[data-type="list"] aside.pack-end span {
 
 /* RTL for thread view */
 
-html[dir="rtl"] .edit .message.incoming .bubble {
+html[dir="rtl"] .edit .message.outgoing .bubble {
   transform: translateX(0);
 }
 
-html[dir="rtl"] .edit .message.outgoing .bubble {
+html[dir="rtl"] .edit .message.incoming .bubble {
   transform: translateX(-2.5rem);
 }
 
@@ -1042,10 +1059,43 @@ html[dir="rtl"] .contact-header aside.pack-end {
   float: left;
 }
 
+/* ellipsis direction hack before bug 883884 fixed */
+.ellipsis-dir-fix {
+  display: block;
+  width: -moz-fit-content;
+  max-width: 100%;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#messages-header-text .ellipsis-dir-fix {
+  width: auto;
+}
+
 /* Text selection control */
-#main-wrapper {
+html {
   -moz-user-select: none;
 }
 .editable-select-mode [contenteditable] {
   -moz-user-select: text;
+}
+
+/* Empty threadlist layout. */
+#threads-no-messages, .threadlist-is-empty #threads-container {
+  display: none;
+}
+
+/* Using !important to override scoped style in gaia-header component. */
+#threads-settings-button, .threadlist-is-empty #threads-options-button {
+  display: none !important;
+}
+
+/* Using flex to center the content. */
+.threadlist-is-empty #threads-settings-button {
+  display: flex !important;
+}
+
+.threadlist-is-empty #threads-no-messages {
+  display: block;
 }

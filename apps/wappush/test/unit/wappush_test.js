@@ -4,10 +4,11 @@
 /* global loadBodyHTML, MockL10n, MessageDB, MockNavigatormozApps,
           MockNavigatorMozIccManager, MockNavigatormozSetMessageHandler,
           MockNavigatorSettings, MockNotification, MocksHelper, Notification,
-          WapPushManager, MockParsedProvisioningDoc */
+          WapPushManager, MockParsedProvisioningDoc, SiSlScreenHelper */
 
 'use strict';
 
+require('/shared/js/event_dispatcher.js');
 require('/shared/test/unit/mocks/mock_dump.js');
 require('/shared/test/unit/mocks/mock_navigator_moz_apps.js');
 require('/shared/test/unit/mocks/mock_navigator_moz_set_message_handler.js');
@@ -676,6 +677,7 @@ suite('WAP Push', function() {
   });
 
   suite('handling actions', function() {
+    var clock;
     var messages = {
       none: {
         sender: '+31641600986',
@@ -687,21 +689,105 @@ suite('WAP Push', function() {
                  '</indication>' +
                  '</si>',
         serviceId: 0
+      },
+      signal_high: {
+        sender: '+31641600986',
+        contentType: 'text/vnd.wap.si',
+        content: '<si>' +
+                 '<indication si-id="gaia-test@mozilla.org"' +
+                 '            action="signal-high">' +
+                 'check this out' +
+                 '</indication>' +
+                 '</si>',
+        serviceId: 0
+      },
+      execute_high: {
+        sender: '+31641600986',
+        contentType: 'text/vnd.wap.sl',
+        content: '<sl href="http://www.mozilla.org" action="execute-high"/>',
+        serviceId: 0
+      },
+      no_action: {
+        sender: '+31641600986',
+        contentType: 'text/vnd.wap.si',
+        content: '<si>' +
+                 '<indication si-id="gaia-test@mozilla.org">' +
+                 'check this out' +
+                 '</indication>' +
+                 '</si>',
+        serviceId: 0
+      },
+      delete: {
+        sender: '+31641600986',
+        contentType: 'text/vnd.wap.si',
+        content: '<si>' +
+                 '<indication si-id="gaia-test@mozilla.org"' +
+                 '            action="delete">' +
+                 'check this out' +
+                 '</indication>' +
+                 '</si>',
+        serviceId: 0
       }
     };
+
+    setup(function() {
+      clock = this.sinon.useFakeTimers();
+      isDocumentHidden = true;
+      this.sinon.spy(window, 'Notification');
+      this.sinon.spy(window, 'close');
+    });
 
     /* XXX: Workaround for bug 981521. We shouldn't send notifications for
      * signal-none messages but we do until we'll have another way for the user
      * to find & display them. */
     test('action=signal-none sends a notification', function(done) {
-      this.sinon.spy(window, 'Notification');
-
       WapPushManager.onWapPushReceived(messages.none).then(function() {
-        done(function checks() {
-          sinon.assert.calledWithMatch(Notification, messages.none.sender,
-            { body: 'check this out' });
-        });
-      }, done);
+        clock.tick(100);
+        sinon.assert.calledWithMatch(Notification, messages.none.sender,
+          { body: 'check this out' });
+        sinon.assert.calledOnce(window.close);
+        assert.isFalse(MockNavigatormozApps.mAppWasLaunched);
+      }).then(done, done);
+    });
+
+    test('action=signal-high displays the SI message immediately',
+    function(done) {
+      this.sinon.spy(SiSlScreenHelper, 'populateScreen');
+
+      WapPushManager.onWapPushReceived(messages.signal_high).then(function() {
+        clock.tick(100);
+        sinon.assert.notCalled(Notification);
+        sinon.assert.notCalled(window.close);
+        sinon.assert.calledOnce(SiSlScreenHelper.populateScreen);
+        assert.isTrue(MockNavigatormozApps.mAppWasLaunched);
+      }).then(done, done);
+    });
+
+    test('action=execute-high displays the SL message immediately',
+    function(done) {
+      this.sinon.spy(SiSlScreenHelper, 'populateScreen');
+
+      WapPushManager.onWapPushReceived(messages.execute_high).then(function() {
+        clock.tick(100);
+        sinon.assert.notCalled(Notification);
+        sinon.assert.notCalled(window.close);
+        sinon.assert.calledOnce(SiSlScreenHelper.populateScreen);
+        assert.isTrue(MockNavigatormozApps.mAppWasLaunched);
+      }).then(done, done);
+    });
+
+    test('action=delete causes notifications of the deleted messages to ' +
+         'be removed', function(done) {
+      this.sinon.spy(MockNotification.prototype, 'close');
+      this.sinon.stub(Date, 'now').returns(0);
+
+      WapPushManager.onWapPushReceived(messages.no_action).then(function() {
+        return WapPushManager.onWapPushReceived(messages.delete);
+      }).then(function() {
+        sinon.assert.calledOnce(Notification);
+        sinon.assert.calledWith(MockNotification.get, { tag: 0 });
+        sinon.assert.calledOnce(MockNotification.prototype.close);
+      }).then(done, done);
     });
   });
 

@@ -1,6 +1,6 @@
 'use strict';
 
-/* globals MockNavigatorMozMobileConnections */
+/* globals MockNavigatorMozMobileConnections, Service */
 
 requireApp('system/js/update_manager.js');
 
@@ -12,7 +12,7 @@ requireApp('system/test/unit/mock_utility_tray.js');
 requireApp('system/test/unit/mock_system_banner.js');
 requireApp('system/test/unit/mock_chrome_event.js');
 requireApp('system/shared/test/unit/mocks/mock_settings_listener.js');
-requireApp('system/test/unit/mock_statusbar.js');
+requireApp('system/js/service.js');
 requireApp('system/test/unit/mock_notification_screen.js');
 requireApp('system/shared/test/unit/mocks/mock_navigator_moz_settings.js');
 requireApp('system/shared/test/unit/mocks/mock_navigator_wake_lock.js');
@@ -24,7 +24,6 @@ requireApp('system/test/unit/mock_asyncStorage.js');
 require('/test/unit/mock_update_manager.js');
 
 var mocksForUpdateManager = new MocksHelper([
-  'StatusBar',
   'SystemBanner',
   'NotificationScreen',
   'UtilityTray',
@@ -112,6 +111,7 @@ suite('system/UpdateManager', function() {
   });
 
   setup(function() {
+    this.sinon.stub(Service, 'request');
     // they are automatically restored at teardown by the test agent
     this.sinon.useFakeTimers();
 
@@ -390,6 +390,82 @@ suite('system/UpdateManager', function() {
 
       test('should not remember about the update', function() {
           assert.isUndefined(UpdateManager.systemUpdatable.mKnownUpdate);
+      });
+    });
+
+    suite('device locked', function() {
+      setup(function() {
+        UpdateManager.init();
+      });
+
+      test('should close all dialogs', function() {
+        UpdateManager.showDownloadPrompt();
+        window.dispatchEvent(new CustomEvent('lockscreen-appopened'));
+        assert.isFalse(UpdateManager.downloadDialog.
+          classList.contains('visible'));
+        assert.isFalse(UpdateManager.downloadViaDataConnectionDialog.
+          classList.contains('visible'));
+        assert.isFalse(MockCustomDialog.mShown);
+      });
+
+      var testCases = [
+        {
+          title: 'should dispatchEvent updatepromptshown, showDownloadPrompt',
+          eventType: 'updatepromptshown',
+          method: 'showDownloadPrompt'
+        },
+        {
+          title: 'should dispatchEvent updatepromptshown,' +
+            'showPromptWifiPrioritized',
+          eventType: 'updatepromptshown',
+          method: 'showPromptWifiPrioritized'
+        },
+        {
+          title: 'should dispatchEvent updatepromptshown,' +
+            'showForbiddenDownload',
+          eventType: 'updatepromptshown',
+          method: 'showForbiddenDownload'
+        },
+        {
+          title: 'should dispatchEvent updatepromptshown,' +
+            'showPromptNoConnection',
+          eventType: 'updatepromptshown',
+          method: 'showPromptNoConnection'
+        },
+        {
+          title: 'should dispatchEvent updateprompthidden,' +
+            ' cancelPrompt',
+          eventType: 'updateprompthidden',
+          method: 'cancelPrompt'
+        }
+      ];
+
+      testCases.forEach(function(testCase) {
+        test(testCase.title, function(done) {
+          window.addEventListener(testCase.eventType, function listener(evt) {
+            window.removeEventListener(testCase.eventType, listener);
+            assert.equal(testCase.eventType, evt.type);
+            done();
+          });
+
+          switch (testCase.method) {
+            case 'showDownloadPrompt':
+              UpdateManager.showDownloadPrompt();
+              break;
+            case 'showPromptWifiPrioritized':
+              UpdateManager.showPromptWifiPrioritized();
+              break;
+            case 'showForbiddenDownload':
+              UpdateManager.showForbiddenDownload();
+              break;
+            case 'showPromptNoConnection':
+              UpdateManager.showPromptNoConnection();
+              break;
+            case 'cancelPrompt':
+              UpdateManager.cancelPrompt();
+              break;
+          }
+        });
       });
     });
   });
@@ -1826,8 +1902,8 @@ suite('system/UpdateManager', function() {
           });
 
           test('should ask for statusbar indicator', function() {
-            var incMethod = 'incSystemDownloads';
-            assert.ok(MockStatusBar.wasMethodCalled[incMethod]);
+            var incMethod = 'incDownloads';
+            assert.isTrue(Service.request.calledWith(incMethod));
           });
 
           test('should request wifi wake lock', function() {
@@ -1882,8 +1958,8 @@ suite('system/UpdateManager', function() {
           });
 
           test('should remove statusbar indicator', function() {
-            var decMethod = 'decSystemDownloads';
-            assert.ok(MockStatusBar.wasMethodCalled[decMethod]);
+            var decMethod = 'decDownloads';
+            assert.isTrue(Service.request.calledWith(decMethod));
           });
 
           test('should release the wifi wake lock', function() {

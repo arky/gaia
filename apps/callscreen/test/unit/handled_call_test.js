@@ -78,7 +78,9 @@ suite('dialer/handled_call', function() {
                           '    data-l10n-id="hangup-a11y-button"></div>' +
                           '    <div class="numberWrapper ' +
                           '      direction-status-bar">' +
-                          '    <div class="number font-light"></div>' +
+                          '    <div class="number font-light">' +
+                          '      <bdi></bdi>' +
+                          '    </div>' +
                           '    <span role="button" id="switch-calls-button">' +
                           '    </span>' +
                           '  </div>' +
@@ -172,8 +174,14 @@ suite('dialer/handled_call', function() {
       });
 
       test('should have a numberNode in a numberWrapper', function() {
-        var numberNode = subject.node.querySelector('.numberWrapper .number');
+        var numberNode =
+          subject.node.querySelector('.numberWrapper .number bdi');
         assert.equal(subject.numberNode, numberNode);
+      });
+
+      test('should have an outerNode in a numberWrapper', function() {
+        var outerNode = subject.node.querySelector('.numberWrapper .number');
+        assert.equal(subject.outerNode, outerNode);
       });
 
       test('should have an additionalContactInfo node', function() {
@@ -635,7 +643,7 @@ suite('dialer/handled_call', function() {
       mockCall.emergency = true;
       subject = new HandledCall(mockCall);
 
-      assert.equal(subject.numberNode.textContent, '112');
+      assert.equal(subject.additionalInfoNode.textContent, 'emergencyNumber');
     });
   });
 
@@ -710,7 +718,7 @@ suite('dialer/handled_call', function() {
       subject.formatPhoneNumber('end');
       sinon.assert.calledWith(
         FontSizeManager.adaptToSpace, MockCallScreen.mScenario,
-        subject.numberNode, false, 'end');
+        subject.outerNode, false, 'end');
     });
 
     test('formatPhoneNumber should not call the font size manager if call is' +
@@ -975,6 +983,60 @@ suite('dialer/handled_call', function() {
         assert.equal(subject.simNumberNode.textContent, 'sim-number');
         assert.deepEqual(MockLazyL10n.keys['sim-number'], {n: 2});
       });
+    });
+  });
+
+  suite('STK Call Control changes Number', function() {
+    test('should resolve to changed contact', function() {
+      mockCall = new MockCall('111', 'dialing');
+      subject = new HandledCall(mockCall);
+      assert.equal(subject.numberNode.textContent, '');
+
+      //simulate the STK change to a different number
+      mockCall.id.number = '555';
+      mockCall._connect();
+      MockVoicemail.mResolvePromise(false);
+
+      assert.equal(subject.numberNode.textContent, 'test name');
+    });
+
+    test('should resolve to number if no contact', function() {
+      mockCall = new MockCall('555', 'dialing');
+      subject = new HandledCall(mockCall);
+      assert.equal(subject.numberNode.textContent, '');
+
+      //simulate the STK change to a different number
+      mockCall.id.number = '111';
+      mockCall._connect();
+      MockVoicemail.mResolvePromise(false);
+
+      assert.equal(subject.numberNode.textContent, '111');
+    });
+
+    test('should resolve to voicemail', function() {
+      //simulate the STK change to a different number
+      mockCall = new MockCall('111', 'dialing');
+      subject = new HandledCall(mockCall);
+      mockCall.id.number = '123';
+
+      mockCall._connect();
+      MockVoicemail.mResolvePromise(true);
+
+      assert.equal(subject.numberNode.textContent, 'voiceMail');
+    });
+
+    test('should correctly identify emergency', function() {
+      //simulate the STK change to a different number
+      mockCall = new MockCall('555', 'dialing');
+      subject = new HandledCall(mockCall);
+
+      mockCall.id.number = '112';
+      mockCall.emergency = true;
+      mockCall._connect();
+
+      assert.equal(subject.additionalInfoNode.textContent, 'emergencyNumber');
+      assert.isTrue(subject.node.classList.contains('emergency'));
+      assert.isTrue(subject.node.textContent.contains('112'));
     });
   });
 });

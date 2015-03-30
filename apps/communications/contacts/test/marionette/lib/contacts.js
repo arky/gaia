@@ -16,10 +16,10 @@ function Contacts(client) {
 Contacts.URL = 'app://communications.gaiamobile.org';
 
 Contacts.config = {
-  settings: {
-    // disable FTU because it blocks our display
-    'ftu.manifestURL': null,
-    'lockscreen.enabled': false
+  prefs: {
+    'device.storage.enabled': true,
+    'device.storage.testing': true,
+    'device.storage.prompt.testing': true
   }
 };
 
@@ -36,11 +36,24 @@ Contacts.Selectors = {
   details: '#view-contact-details',
   detailsEditContact: '#edit-contact-button',
   detailsTelLabelFirst: '#phone-details-template-0 h2',
-  detailsTelButtonFirst: 'button.icon-call[data-tel]',
+  detailsTelButtonFirst: '.button.icon-call[data-tel]',
+  detailsEmail: '#contact-detail-inner #email-details-template-0 div.item',
+  detailsAddress: '#contact-detail-inner #address-details-template-0 div.item',
+  detailsOrg: '#contact-detail-inner #org-title',
+  detailsNote: '#contact-detail-inner #note-details-template-0',
   detailsFindDuplicate: '#contact-detail-inner #find-merge-button',
   detailsFavoriteButton: '#toggle-favorite',
   detailsContactName: '#contact-name-title',
   detailsHeader: '#details-view-header',
+  detailsSocialLabel: '#contact-detail-inner #details-list #social-label',
+  detailsSocialTemplate: '#contact-detail-inner #details-list .social-actions',
+  detailsCoverImage: '#cover-img',
+  detailsLinkButton: '#contact-detail-inner #link_button',
+  detailsShareButton: '#contact-detail-inner #share_button',
+  fbMsgButton: '#contact-detail-inner #msg_button',
+  fbWallButton: '#contact-detail-inner #wall_button',
+  fbProfileButton: '#contact-detail-inner #profile_button',
+
   findDupsButton: '#details-list #find-merge-button',
 
   duplicateFrame: 'iframe[src*="matching_contacts.html"]',
@@ -63,10 +76,15 @@ Contacts.Selectors = {
   formTel: '#contacts-form-phones input[type="tel"]',
   formDelFirstTel: '#add-phone-0 .img-delete-button',
   formTelLabelFirst: '#tel_type_0',
+  formTelNumberFirst: '#number_0',
   formTelNumberSecond: '#number_1',
   formEmailFirst: '#email_0',
+  formEmailSecond: '#email_1',
   formPhotoButton: '#photo-button',
   formAddNewTel: '#add-new-phone',
+  formAddNewEmail: '#add-new-email',
+  formHeader: '#contact-form-header',
+  formPhotoImg: '#thumbnail-photo',
 
   groupList: ' #groups-list',
   list: '#view-contacts-list',
@@ -105,7 +123,16 @@ Contacts.Selectors = {
 
   activityChooser: 'form[data-type="action"]',
   buttonActivityChooser: 'form[data-type="action"] button',
-  actionMenu: '#action-menu'
+  actionMenu: '#action-menu',
+  actionMenuList: '#value-menu',
+
+  multipleSelectSave: '#save-button',
+  multipleSelectStatus: '#statusMsg p',
+
+  systemMenu: 'form[data-z-index-level="action-menu"]',
+
+  galleryImage: '.thumbnail img',
+  galleryDone: '#crop-done-button'
 };
 
 Contacts.prototype = {
@@ -252,6 +279,25 @@ Contacts.prototype = {
     this.enterContactDetails(details);
 
     this.client.helper.waitForElement(selectors.list);
+  },
+
+  addContactMultipleEmails: function(details) {
+    var selectors = Contacts.Selectors;
+
+    var addContact = this.client.findElement(selectors.formNew);
+    addContact.click();
+    this.client.helper.waitForElement(selectors.formAddNewEmail).click();
+
+    this.enterContactDetails(details);
+
+    this.client.helper.waitForElement(selectors.list);
+  },
+
+  get systemMenu() {
+    var selectors = Contacts.Selectors;
+    // Switch to the system app first.
+    this.client.switchToFrame();
+    return this.client.helper.waitForElement(selectors.systemMenu);
   },
 
   /**

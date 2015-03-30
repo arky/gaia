@@ -10,10 +10,6 @@ marionette('Browser - Launch a URL navigates the same window',
   var client = marionette.client({
     prefs: {
       'dom.w3c_touch_events.enabled': 1
-    },
-    settings: {
-      'ftu.manifestURL': null,
-      'lockscreen.enabled': false
     }
   });
 
@@ -36,8 +32,6 @@ marionette('Browser - Launch a URL navigates the same window',
     search = client.loader.getAppClass('search');
     system = client.loader.getAppClass('system');
     system.waitForStartup();
-
-    search.removeGeolocationPermission();
   });
 
   test('opens a new sheet with window.open()', function() {

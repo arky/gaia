@@ -7,13 +7,15 @@ require('/shared/test/unit/mocks/mock_service.js');
 requireApp('system/test/unit/mock_app_window.js');
 requireApp('system/test/unit/mock_popup_window.js');
 requireApp('system/test/unit/mock_activity_window.js');
+requireApp('system/test/unit/mock_trusted_window.js');
 requireApp('system/test/unit/mock_attention_window.js');
+requireApp('system/test/unit/mock_global_overlay_window.js');
 requireApp('system/shared/test/unit/mocks/mock_settings_listener.js');
 requireApp('system/test/unit/mock_activity.js');
 
 var mocksForChildWindowFactory = new MocksHelper([
-  'MozActivity', 'AppWindow', 'ActivityWindow', 'PopupWindow',
-  'SettingsListener', 'AttentionWindow', 'Service'
+  'MozActivity', 'AppWindow', 'ActivityWindow', 'PopupWindow', 'TrustedWindow',
+  'SettingsListener', 'AttentionWindow', 'Service', 'GlobalOverlayWindow'
 ]).init();
 
 suite('system/ChildWindowFactory', function() {
@@ -87,6 +89,14 @@ suite('system/ChildWindowFactory', function() {
     manifest: {}
   };
 
+  var fakeTrustedDetail = {
+    name: 'trustedname',
+    frame: document.createElement('iframe'),
+    requestId: 'testrequestid',
+    chromeId: 'testchromeid'
+
+  };
+
   var fakeOpenAppDetail = {
     url: 'http://fake.com/index.html',
     name: 'http://fake.com/manifest.webapp',
@@ -98,6 +108,13 @@ suite('system/ChildWindowFactory', function() {
     'manifestURL': 'app://fakeatt.gaiamobile.org/manifest.webapp',
     iframe: document.createElement('iframe'),
     features: 'attention'
+  };
+
+  var fakeGlobalOverlayDetail = {
+    'url': 'app://fakeglobaloverlay.gaiamobile.org/pick.html',
+    'manifestURL': 'app://fakeglobaloverlay.gaiamobile.org/manifest.webapp',
+    iframe: document.createElement('iframe'),
+    features: 'global-clickthrough-overlay'
   };
 
   test('Should only open inner sheet in setting enabled', function() {
@@ -122,6 +139,19 @@ suite('system/ChildWindowFactory', function() {
     cwf.handleEvent(new CustomEvent('mozbrowseropenwindow',
       {
         detail: fakeAttentionDetail
+      }));
+    assert.isTrue(spy.calledWithNew());
+    assert.deepEqual(spy.getCall(0).args[0].parentWindow, app1);
+  });
+
+  test('Open global overlay window', function() {
+    var app1 = new MockAppWindow(fakeAppConfig1);
+    var spy = this.sinon.spy(window, 'GlobalOverlayWindow');
+    var cwf = new ChildWindowFactory(app1);
+    this.sinon.stub(app1, 'hasPermission').returns(true);
+    cwf.handleEvent(new CustomEvent('mozbrowseropenwindow',
+      {
+        detail: fakeGlobalOverlayDetail
       }));
     assert.isTrue(spy.calledWithNew());
     assert.deepEqual(spy.getCall(0).args[0].parentWindow, app1);
@@ -276,12 +306,26 @@ suite('system/ChildWindowFactory', function() {
   test('Create ActivityWindow', function() {
     var app1 = new MockAppWindow(fakeAppConfig1);
     var spy = this.sinon.spy(window, 'ActivityWindow');
+    this.sinon.spy(app1, '_setVisibleForScreenReader');
     new ChildWindowFactory(app1);
     app1.element.dispatchEvent(new CustomEvent('_launchactivity', {
       detail: fakeActivityDetail
     }));
     assert.isTrue(spy.calledWithNew());
     assert.deepEqual(spy.getCall(0).args[0], fakeActivityDetail);
+    assert.deepEqual(spy.getCall(0).args[1], app1);
+    sinon.assert.calledWith(app1._setVisibleForScreenReader, false);
+  });
+
+  test('Create TrustedWindow', function() {
+    var app1 = new MockAppWindow(fakeAppConfig1);
+    var spy = this.sinon.spy(window, 'TrustedWindow');
+    new ChildWindowFactory(app1);
+    app1.element.dispatchEvent(new CustomEvent('_launchtrusted', {
+      detail: fakeTrustedDetail
+    }));
+    assert.isTrue(spy.calledWithNew());
+    assert.deepEqual(spy.getCall(0).args[0], fakeTrustedDetail);
     assert.deepEqual(spy.getCall(0).args[1], app1);
   });
 
@@ -323,6 +367,7 @@ suite('system/ChildWindowFactory', function() {
     var cwf = new ChildWindowFactory(app1);
     this.sinon.stub(app1, 'isActive').returns(true);
     this.sinon.stub(app1, 'isVisible').returns(true);
+    this.sinon.spy(app1, '_setVisibleForScreenReader');
     cwf.handleEvent(new CustomEvent('mozbrowseropenwindow',
       {
         detail: fakeWindowOpenPopup
@@ -335,6 +380,7 @@ suite('system/ChildWindowFactory', function() {
         }));
     assert.isTrue(stubSetOrientation.called);
     assert.isTrue(stubRequestForeground.called);
+    sinon.assert.calledWith(app1._setVisibleForScreenReader, true);
   });
 
   suite('runningFTU', function() {

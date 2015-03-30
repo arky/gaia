@@ -80,7 +80,7 @@ suite('ContactRenderer', function() {
             type: 'Mobile',
             carrier: 'TEF'
           }
-        ),
+        ).toString(),
         photoHTML: '',
         type: 'Mobile'
       });
@@ -141,7 +141,7 @@ suite('ContactRenderer', function() {
         phoneDetailsHTML: SharedComponents.phoneDetails(
           { number: '+<span class="highlight">346578888888</span>' },
           { safe: ['number'] }
-        ),
+        ).toString(),
         photoHTML: '',
         type: ''
       });
@@ -577,7 +577,7 @@ suite('ContactRenderer', function() {
         phoneDetailsHTML: SharedComponents.phoneDetails(
           { number: '+<span class="highlight">346578888888</span>' },
           { safe: ['number'] }
-        ),
+        ).toString(),
         photoHTML: '',
         type: ''
       });
@@ -689,7 +689,7 @@ suite('ContactRenderer', function() {
             carrier: 'XXX'
           },
           { safe: ['number'] }
-        ),
+        ).toString(),
         photoHTML: sinon.match(photo),
         type: 'B'
       });
@@ -838,6 +838,52 @@ suite('ContactRenderer', function() {
       });
 
       assert.isFalse(isNotRendered);
+    });
+  });
+
+  suite('report-view', function() {
+    var renderer;
+
+    setup(function() {
+      renderer = ContactRenderer.flavor('report-view');
+    });
+
+    test('correct rendering', function() {
+      var selector = '.js-contact-info';
+      var infoBlock = document.createElement('div');
+
+      renderer.render({
+        contact: contact,
+        target: ul,
+        input: contact.tel[0].value,
+        infoBlock: infoBlock,
+        infoBlockParentSelector: selector,
+      });
+
+      var contactInfo = ul.querySelector(selector);
+      assert.isTrue(contactInfo.contains(infoBlock));
+      assert.notEqual(contactInfo.tagName, 'A');
+    });
+  });
+
+  suite('group-view', function() {
+    var renderer;
+
+    setup(function() {
+      renderer = ContactRenderer.flavor('group-view');
+    });
+
+    test('correct rendering', function() {
+      var selector = '.js-contact-info';
+
+      renderer.render({
+        contact: contact,
+        target: ul,
+        input: contact.tel[0].value
+      });
+
+      var contactInfo = ul.querySelector(selector);
+      assert.equal(contactInfo.tagName, 'A');
     });
   });
 });

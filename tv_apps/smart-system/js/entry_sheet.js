@@ -3,8 +3,8 @@
 /* Define a entry sheet.
  * It creates a element provided by container, title, content.
  */
-
-var EntrySheet = (function invocation() {
+/* jshint ignore:start */
+window.EntrySheet = (function invocation() {
   function EntrySheet() { // This constructor function is a local variable.
     render.apply(this, arguments); // All arguments are values to render
   }
@@ -30,6 +30,9 @@ var EntrySheet = (function invocation() {
 
       // Here we remove entire element once the close button is pressed.
       this.container.removeChild(this.element);
+      if (this.onCloseCallback) {
+        this.onCloseCallback();
+      }
     }.bind(this));
     this.element.classList.add('disappearing');
   };
@@ -52,7 +55,7 @@ var EntrySheet = (function invocation() {
     '</div';
   }
 
-  function render(container, title, content) {
+  function render(container, title, content, onCloseCallback) {
     this.container = container;
     this.title = title;
     this.container.insertAdjacentHTML('beforeend', view.apply(this));
@@ -66,6 +69,7 @@ var EntrySheet = (function invocation() {
       this.container.querySelector('.' + EntrySheet.className + ' .content');
     this.element = this.container.querySelector('.' + EntrySheet.className);
     this.element.dataset.zIndexLevel = 'dialog-overlay';
+    this.onCloseCallback = onCloseCallback;
 
     var self = this;
     // XXX: We may make entry sheet to generate browser frame by itself,
@@ -93,7 +97,6 @@ var EntrySheet = (function invocation() {
     });
   }
 
-  var nextId = 0;
   // The public API for this module is the EntrySheet() constructor function.
   // We need to export that function from this private namespace so that
   // it can be used on the outside. In this case, we export the constructor
@@ -101,3 +104,4 @@ var EntrySheet = (function invocation() {
   // on the first line above.
   return EntrySheet;
 }()); // Invoke the function immediately after defining it.
+/* jshint ignore:end */

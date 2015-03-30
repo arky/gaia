@@ -1,3 +1,5 @@
+/* global Service */
+
 'use strict';
 
 /*
@@ -106,6 +108,7 @@ var UpdateManager = {
     window.addEventListener('applicationuninstall', this);
     window.addEventListener('online', this);
     window.addEventListener('offline', this);
+    window.addEventListener('lockscreen-appopened', this);
 
     SettingsListener.observe('gaia.system.checkForUpdates', false,
                              this.checkForUpdates.bind(this));
@@ -128,8 +131,8 @@ var UpdateManager = {
   },
 
   startDownloads: function um_startDownloads() {
-    this.downloadDialog.classList.remove('visible');
     this.downloadViaDataConnectionDialog.classList.remove('visible');
+    this._closeDownloadDialog();
     UtilityTray.show();
 
     var checkValues = {};
@@ -298,6 +301,7 @@ var UpdateManager = {
     };
 
     var screen = document.getElementById('screen');
+    window.dispatchEvent(new CustomEvent('updatepromptshown'));
 
     CustomDialog
       .show('systemUpdate', 'downloadUpdatesVia2GForbidden3', ok, null, screen)
@@ -313,6 +317,7 @@ var UpdateManager = {
     };
 
     var screen = document.getElementById('screen');
+    window.dispatchEvent(new CustomEvent('updatepromptshown'));
 
     CustomDialog
       .show('systemUpdate', 'downloadOfflineWarning2', ok, null, screen)
@@ -387,6 +392,7 @@ var UpdateManager = {
       this.downloadDialogList.appendChild(listItem);
     }, this);
 
+    window.dispatchEvent(new CustomEvent('updatepromptshown'));
     this.downloadDialog.classList.add('visible');
     this.updateDownloadButton();
   },
@@ -413,13 +419,13 @@ var UpdateManager = {
 
   cancelPrompt: function um_cancelPrompt() {
     CustomDialog.hide();
-    this.downloadDialog.classList.remove('visible');
+    this._closeDownloadDialog();
   },
 
   cancelDataConnectionUpdatesPrompt: function um_cancelDCUpdatesPrompt() {
     CustomDialog.hide();
     this.downloadViaDataConnectionDialog.classList.remove('visible');
-    this.downloadDialog.classList.remove('visible');
+    this._closeDownloadDialog();
   },
 
   getWifiPrioritized: function um_getWifiPrioritized() {
@@ -487,9 +493,10 @@ var UpdateManager = {
     var messageL10n = this.connection2G ? 'downloadWifiPrioritizedUsing2G' :
       'downloadWifiPrioritized3';
 
-    this.downloadDialog.classList.remove('visible');
+    this._closeDownloadDialog();
 
     var screen = document.getElementById('screen');
+    window.dispatchEvent(new CustomEvent('updatepromptshown'));
 
     UtilityTray.hide();
     CustomDialog.show(
@@ -637,7 +644,7 @@ var UpdateManager = {
 
     if (this.downloadsQueue.length === 1) {
       this._downloading = true;
-      StatusBar.incSystemDownloads();
+      Service.request('incDownloads');
       this._wifiLock = navigator.requestWakeLock('wifi');
 
       this.displayNotificationIfHidden();
@@ -654,7 +661,7 @@ var UpdateManager = {
 
     if (this.downloadsQueue.length === 0) {
       this._downloading = false;
-      StatusBar.decSystemDownloads();
+      Service.request('decDownloads');
       this._downloadedBytes = 0;
       this.checkStatuses();
 
@@ -733,6 +740,11 @@ var UpdateManager = {
       case 'wifi-statuschange':
         this.updateWifiStatus();
         break;
+       case 'lockscreen-appopened':
+        this.downloadViaDataConnectionDialog.classList.remove('visible');
+        this._closeDownloadDialog();
+        CustomDialog.hide();
+        break;
     }
 
     if (evt.type !== 'mozChromeEvent')
@@ -809,6 +821,7 @@ var UpdateManager = {
           'downloadUpdatesViaDataRoamingConnection');
         _(this.downloadViaDataConnectionMessage,
           'downloadUpdatesViaDataRoamingConnectionMessage');
+        window.dispatchEvent(new CustomEvent('updatepromptshown'));
         this.downloadViaDataConnectionDialog.classList.add('visible');
         return;
       }
@@ -858,6 +871,11 @@ var UpdateManager = {
     var e = Math.floor(Math.log(bytes) / Math.log(1024));
     return (bytes / Math.pow(1024, Math.floor(e))).toFixed(2) + ' ' +
       _(units[e]);
+  },
+
+  _closeDownloadDialog: function um_closeDownloadDialog() {
+    window.dispatchEvent(new CustomEvent('updateprompthidden'));
+    this.downloadDialog.classList.remove('visible');
   }
 };
 

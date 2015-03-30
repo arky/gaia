@@ -9,9 +9,9 @@ var frames = $('frames');
 // reused when we pan to the next or previous photo: next becomes
 // current, current becomes previous etc.  See nextFile() and
 // previousFile().  Note also that the Frame object is not a DOM
-// element.  Use currentFrame.container to refer to the div
+// element.  Use currentFrame.container to refer to the section
 // element. The frame constructor creates an <img> element, a <video>
-// element, and video player controls within the div, and you can refer to
+// element, and video player controls within the section, and you can refer to
 // those as currentFrame.image and currentFrame.video.player and
 // currentFrame.video.controls.
 var maxImageSize = CONFIG_MAX_IMAGE_PIXEL_SIZE;
@@ -44,7 +44,7 @@ fullscreenButtons.delete.onclick = deleteSingleItem;
 
 // Clicking the Edit button while viewing a photo switches to edit mode
 fullscreenButtons.edit.onclick = function() {
-  LazyLoader.load(['js/ImageEditor.js',
+  LazyLoader.load(['js/ImageEditor.js', 'shared/style/action_menu.css',
                    'shared/js/media/crop_resize_rotate.js'],
                   function() {
                     editPhotoIfCardNotFull(currentFileIndex);
@@ -72,6 +72,7 @@ frames.addEventListener('dbltap', dblTapHandler);
 frames.addEventListener('pan', panHandler);
 frames.addEventListener('swipe', swipeHandler);
 frames.addEventListener('transform', transformHandler);
+frames.addEventListener('wheel', wheelHandler);
 
 currentFrame.video.onfullscreentap =
   previousFrame.video.onfullscreentap =
@@ -140,7 +141,8 @@ function deleteSingleItem() {
     messageId: msg,
     cancelId: 'cancel',
     confirmId: 'delete',
-    danger: true
+    danger: true,
+    bodyClass: 'showing-dialog'
   }, function() { // onSuccess
     // disable delete, edit and share button to prevent
     // operations while delete item
@@ -399,6 +401,19 @@ function swipeHandler(event) {
   }
 }
 
+// When a screen reader swipes with two fingers
+function wheelHandler(event) {
+  if (event.deltaMode !== event.DOM_DELTA_PAGE || !event.deltaX) {
+    return;
+  }
+
+  if (event.deltaX > 0) {
+    nextFile(150);
+  } else {
+    previousFile(150);
+  }
+}
+
 // We also support pinch-to-zoom
 function transformHandler(e) {
   if (transitioning)
@@ -485,6 +500,11 @@ function setFramesPosition() {
   nextFrame.container.classList.remove('current');
   previousFrame.container.classList.remove('current');
   currentFrame.container.classList.add('current');
+
+  // Hide adjacent frames from screen reader
+  nextFrame.container.setAttribute('aria-hidden', true);
+  previousFrame.container.setAttribute('aria-hidden', true);
+  currentFrame.container.removeAttribute('aria-hidden');
 }
 
 function resetFramesPosition() {

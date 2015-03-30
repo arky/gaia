@@ -2,7 +2,6 @@
 
 var Rocketbar = require('./lib/rocketbar');
 var Server = require('../../../../shared/test/integration/server');
-var Actions = require('marionette-client').Actions;
 var assert = require('chai').assert;
 
 marionette('Software Home Button - File Open Error', function() {
@@ -13,8 +12,6 @@ marionette('Software Home Button - File Open Error', function() {
       'dom.w3c_touch_events.enabled': 1
     },
     settings: {
-      'ftu.manifestURL': null,
-      'lockscreen.enabled': false,
       'software-button.enabled': true
     }
   });
@@ -25,9 +22,8 @@ marionette('Software Home Button - File Open Error', function() {
     rocketbar = new Rocketbar(client);
     search = client.loader.getAppClass('search');
     system = client.loader.getAppClass('system');
-    actions = new Actions(client);
+    actions = client.loader.getActions();
     system.waitForStartup();
-    search.removeGeolocationPermission();
   });
 
   suiteSetup(function(done) {

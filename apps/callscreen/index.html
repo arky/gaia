@@ -18,13 +18,15 @@
     <!-- Localization -->
     <script defer type="text/javascript" src="/shared/js/lazy_loader.js"></script>
     <script defer type="application/javascript" src="/shared/js/lazy_l10n.js"></script>
-    <link rel="manifest" href="manifest.webapp">
+    <meta name="defaultLanguage" content="en-US">
+    <meta name="availableLanguages" content="en-US">
     <link rel="localization" href="../communications/dialer/locales/dialer.{locale}.properties">
     <link rel="localization" href="../communications/dialer/locales/shared.{locale}.properties">
     <link rel="localization" href="shared/locales/date/date.{locale}.properties">
     <link rel="localization" href="shared/locales/phone_types/phone_types.{locale}.properties">
     <link rel="localization" href="shared/locales/lockscreen/lockscreen.{locale}.properties">
     <link rel="localization" href="shared/locales/keypad/keypad.{locale}.properties">
+    <link rel="localization" href="shared/locales/telephony/telephony.{locale}.properties">
     <!-- Making sure the shared resources will be copy into the zip
     <script type="application/javascript" src="/shared/js/l10n.js"></script>
     <script type="application/javascript" src="/shared/js/l10n_date.js"></script>
@@ -85,7 +87,7 @@
         <section id="handled-call-template" role="dialog" hidden>
           <div class="hangup-button" role="button" data-l10n-id="hangup-a11y-button"></div>
           <div class="numberWrapper direction-status-bar">
-            <div class="number font-light"></div>
+            <div class="number font-light"><bdi></bdi></div>
             <span role="button" id="switch-calls-button"></span>
           </div>
           <div class="additionalContactInfo font-light"></div>
@@ -154,7 +156,7 @@
             <p></p>
           </section>
           <footer id="call-options">
-            <section id="co-advanced">
+            <section id="co-advanced" dir="ltr">
               <div class="grid-wrapper grid">
                 <span class="grid-cell options-column">
                   <button id="mute" class="co-advanced-option grid center" data-l10n-id="mute">
@@ -303,7 +305,7 @@
               </span>
             </div>
           </section>
-          <section id="keypad-hidebar">
+          <section id="keypad-hidebar" dir="ltr">
             <button id= "keypad-hidebar-mute-action" class="kh__button kh__button--mute"></button>
             <button id= "keypad-hidebar-hang-up-action-wrapper" class="kh__call-end-button"></button>
             <button id= "keypad-hidebar-hide-keypad-action" class="kh__button kh__button--hide"></button>

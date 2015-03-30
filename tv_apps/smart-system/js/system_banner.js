@@ -1,11 +1,12 @@
 'use strict';
+/* global focusManager */
 
 (function(exports) {
 
  /**
    * SystemBanner displays a type of notification to the user in certain cases.
    * It is a type of temporary notification that does not live in the
-   * notifications tray. Examples of the SystemBanner implementation include 
+   * notifications tray. Examples of the SystemBanner implementation include
    * application installation, crash reporter, and low storage notices.
    * @class SystemBanner
    */
@@ -64,12 +65,17 @@
      */
     show: function(message, buttonParams) {
       var banner = this.banner;
-      banner.firstElementChild.textContent = message;
-
+      navigator.mozL10n.setAttributes(
+        banner.firstElementChild,
+        message.id,
+        message.args
+      );
       var button = banner.querySelector('button');
+
       if (buttonParams) {
+        focusManager.addUI(this);
         banner.dataset.button = true;
-        button.textContent = buttonParams.label;
+        button.setAttribute('data-l10n-id', buttonParams.labelL10nId);
         this._clickCallback = function() {
           this._clicked = true;
           buttonParams.callback();
@@ -82,6 +88,7 @@
         banner.classList.remove('visible');
 
         if (buttonParams) {
+          focusManager.removeUI(this);
           if (buttonParams.dismiss && !this._clicked) {
             buttonParams.dismiss();
           }
@@ -90,9 +97,27 @@
           button.classList.remove('visible');
           this.banner.parentNode.removeChild(this.banner);
         }
+        focusManager.focus();
       }.bind(this));
-
+      focusManager.focus();
       banner.classList.add('visible');
+    },
+
+    isFocusable: function() {
+      return this._banner && this._banner.classList.contains('visible');
+    },
+
+    getElement: function() {
+      if (this.isFocusable()) {
+        return this._banner;
+      }
+    },
+
+    focus: function() {
+      if (this.isFocusable()) {
+        document.activeElement.blur();
+        this._banner.querySelector('button').focus();
+      }
     }
   };
 

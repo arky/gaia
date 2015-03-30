@@ -6,7 +6,6 @@ require('/js/views/handwriting_pad_view.js');
 require('/js/views/layout_page_view.js');
 
 suite('Views > LayoutPageView', function() {
-
   var dummyLayout = {
     width: 2,
     keys: [
@@ -14,8 +13,12 @@ suite('Views > LayoutPageView', function() {
     ]
   };
 
+  var viewManager = {
+    registerView: sinon.stub()
+  };
+
   test(' > show() ', function() {
-    var pageView = new LayoutPageView(dummyLayout, {});
+    var pageView = new LayoutPageView(dummyLayout, {}, viewManager);
     pageView.render();
 
     pageView.show();
@@ -25,7 +28,7 @@ suite('Views > LayoutPageView', function() {
   });
 
   test(' > hide() ', function() {
-    var pageView = new LayoutPageView(dummyLayout, {});
+    var pageView = new LayoutPageView(dummyLayout, {}, viewManager);
     pageView.render();
 
     pageView.hide();
@@ -45,7 +48,7 @@ suite('Views > LayoutPageView', function() {
         ]
       };
 
-      var pageView = new LayoutPageView(layout, {});
+      var pageView = new LayoutPageView(layout, {}, viewManager);
       pageView.render();
 
       var container = pageView.element;
@@ -66,32 +69,12 @@ suite('Views > LayoutPageView', function() {
         keyClassName: 'c9'
       };
 
-      var pageView = new LayoutPageView(layout, {});
+      var pageView = new LayoutPageView(layout, {}, viewManager);
       pageView.render();
 
       var container = pageView.element;
       assert.equal(container.querySelectorAll('.keyboard-key').length, 2);
       assert.equal(container.querySelectorAll('.keyboard-key.c9').length, 2);
-    });
-
-    test('rowLayoutWidth should be sum of all key ratios', function() {
-      var layout = {
-        width: 9,
-        keys: [
-          [{ value: 'a', ratio: 3 }, { value: 'b', ratio: 2 }],
-          [{ value: 'a' }, { value: 'b' }],
-          [{ value: 'a', ratio: 5 }, { value: 'b' }]
-        ]
-      };
-
-      var pageView = new LayoutPageView(layout, {});
-      pageView.render();
-
-      var container = pageView.element;
-      var rows = container.querySelectorAll('.keyboard-row');
-      assert.equal(rows[0].dataset.layoutWidth, 5);
-      assert.equal(rows[1].dataset.layoutWidth, 2);
-      assert.equal(rows[2].dataset.layoutWidth, 6);
     });
 
     test('Keycode should be set', function() {
@@ -102,7 +85,7 @@ suite('Views > LayoutPageView', function() {
         ]
       };
 
-      var pageView = new LayoutPageView(layout, {});
+      var pageView = new LayoutPageView(layout, {}, viewManager);
       pageView.render();
 
       var container = pageView.element;
@@ -122,7 +105,7 @@ suite('Views > LayoutPageView', function() {
         ]
       };
 
-      var pageView = new LayoutPageView(layout, {});
+      var pageView = new LayoutPageView(layout, {}, viewManager);
       pageView.render();
       pageView.setUpperCaseLock({
         isUpperCase: true,
@@ -148,7 +131,7 @@ suite('Views > LayoutPageView', function() {
         ]
       };
 
-      var pageView = new LayoutPageView(layout, {});
+      var pageView = new LayoutPageView(layout, {}, viewManager);
       pageView.render();
       pageView.setUpperCaseLock({
         isUpperCase: false,
@@ -174,7 +157,7 @@ suite('Views > LayoutPageView', function() {
         ]
       };
 
-      var pageView = new LayoutPageView(layout, {});
+      var pageView = new LayoutPageView(layout, {}, viewManager);
       pageView.render();
       pageView.setUpperCaseLock({
         isUpperCase: false,
@@ -211,7 +194,7 @@ suite('Views > LayoutPageView', function() {
         ]
       };
 
-      var pageView = new LayoutPageView(layout, {});
+      var pageView = new LayoutPageView(layout, {}, viewManager);
       pageView.render();
 
       var container = pageView.element;
@@ -228,7 +211,7 @@ suite('Views > LayoutPageView', function() {
           specificCssRule: true
         };
 
-        var pageView = new LayoutPageView(layout, {});
+        var pageView = new LayoutPageView(layout, {}, viewManager);
         pageView.render();
 
         var container = pageView.element;
@@ -243,7 +226,7 @@ suite('Views > LayoutPageView', function() {
           specificCssRule: false
         };
 
-        var pageView = new LayoutPageView(layout, {});
+        var pageView = new LayoutPageView(layout, {}, viewManager);
         pageView.render();
 
         var container = pageView.element;
@@ -264,7 +247,7 @@ suite('Views > LayoutPageView', function() {
           ]
         ]
       };
-      pageView = new LayoutPageView(layout, {});
+      pageView = new LayoutPageView(layout, {}, viewManager);
       pageView.render();
     });
 
@@ -370,6 +353,110 @@ suite('Views > LayoutPageView', function() {
     test('unHighlightKey()', function() {
       pageView.unHighlightKey({});
       assert.isTrue(keyView.unHighlight.calledOnce);
+    });
+  });
+
+  suite(' > getVisualData()', function() {
+    var layout = {
+      width: 2,
+      keys: [
+        [{ value: 'a' }, { value: 'b' }],
+        [{ value: 'c' }, { value: 'd' }],
+        [{ value: 'e' }, { value: 'f' }]
+      ]
+    };
+    var pageView  = null;
+    var viewManager = {
+      registerView: sinon.stub()
+    };
+
+    var rootElement;
+
+    setup(function() {
+      rootElement = document.createElement('div');
+      document.body.appendChild(rootElement);
+    });
+
+    teardown(function() {
+      document.body.removeChild(rootElement);
+    });
+
+    test('check getVisualData sanity', function() {
+      var layout = {
+        width: 10,
+        keys: [
+          [{}, {}, {}, {}, {}, {}, {}, {}, {}, {}]
+        ]
+      };
+
+      pageView = new LayoutPageView(layout, {}, viewManager);
+      pageView.render();
+
+      rootElement.appendChild(pageView.element);
+
+      var vData = pageView.getVisualData();
+
+      var visuals = [].slice.call(
+        document.querySelectorAll('.visual-wrapper'));
+
+      visuals.forEach(function(v, ix) {
+        assert.equal(v.offsetLeft, vData[ix].x, 'x for ' + ix);
+        assert.equal(v.offsetTop, vData[ix].y, 'y for ' + ix);
+        assert.equal(v.clientWidth, vData[ix].width, 'width for ' + ix);
+        assert.equal(v.clientHeight, vData[ix].height, 'height for ' + ix);
+      });
+    });
+
+    test('check getVisualData sanity for filled up space', function() {
+      var layout = {
+        width: 4,
+        keys: [
+          [{}, {}, {}]
+        ]
+      };
+
+      pageView = new LayoutPageView(layout, {}, viewManager);
+      pageView.render();
+
+      rootElement.appendChild(pageView.element);
+
+      var vData = pageView.getVisualData();
+
+
+      var visuals = [].slice.call(
+        document.querySelectorAll('.visual-wrapper'));
+
+      visuals.forEach(function(v, ix) {
+        assert.equal(v.offsetLeft, vData[ix].x, 'x for ' + ix);
+        assert.equal(v.offsetTop, vData[ix].y, 'y for ' + ix);
+        assert.equal(v.clientWidth, vData[ix].width, 'width for ' + ix);
+        assert.equal(v.clientHeight, vData[ix].height, 'height for ' + ix);
+      });
+    });
+
+    test('getVisualData will return cached data', function() {
+      pageView = new LayoutPageView(layout, {}, viewManager);
+      pageView.render();
+
+      var vData = pageView.getVisualData();
+      var vData2 = pageView.getVisualData();
+
+      assert.equal(vData, vData2);
+    });
+
+    test('getVisualData() will return cached data for different ' +
+         'size', function() {
+      pageView = new LayoutPageView(layout, {}, viewManager);
+      pageView.render();
+
+      var vData = pageView.getVisualData();
+
+      pageView.resize(480);
+      var vData2 = pageView.getVisualData();
+      assert.notEqual(vData, vData2);
+
+      var vData3 = pageView.getVisualData();
+      assert.equal(vData2, vData3);
     });
   });
 });

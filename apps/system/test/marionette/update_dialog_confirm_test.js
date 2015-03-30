@@ -12,8 +12,6 @@ marionette('Software Home Button - Update Dialog Confirm', function() {
       'dom.w3c_touch_events.enabled': 1
     },
     settings: {
-      'ftu.manifestURL': null,
-      'lockscreen.enabled': false,
       'software-button.enabled': false
     }
   });
@@ -71,5 +69,16 @@ marionette('Software Home Button - Update Dialog Confirm', function() {
       var dialogRect = dialog.scriptWith(rect);
       return winHeight === dialogRect.height;
     });
+  });
+
+  test('Rocketbar should not be expandable in update dialog', function() {
+    var input = client.findElement('#homescreen .titlebar');
+    client.waitFor(input.displayed.bind(input));
+    triggerUpdateDownload();
+    client.helper.waitForElement('#dialog-screen');
+    input.tap(25, 25);
+    // Waiting for the element to disappear is how we assert the element won't
+    // show up since internally marionette will poll for it's appearance.
+    client.helper.waitForElementToDisappear(system.Selector.activeKeyboard);
   });
 });

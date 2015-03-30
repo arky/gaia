@@ -1,5 +1,5 @@
 /* exported PlayerView */
-/* global TitleBar, MusicComms, musicdb, ModeManager, App, AlbumArt,
+/* global TitleBar, MusicComms, musicdb, ModeManager, App, AlbumArtCache,
           AudioMetadata, ListView, ForwardLock, formatTime, MozActivity,
           asyncStorage, SETTINGS_OPTION_KEY, MODE_PLAYER */
 'use strict';
@@ -85,6 +85,7 @@ var PlayerView = {
 
     this.ratings = document.getElementById('player-album-rating').children;
 
+    this.seekSlider = document.getElementById('player-seek');
     this.seekRegion = document.getElementById('player-seek-bar');
     this.seekBar = document.getElementById('player-seek-bar-progress');
     this.seekIndicator = document.getElementById('player-seek-bar-indicator');
@@ -116,6 +117,7 @@ var PlayerView = {
     this.seekRegion.addEventListener('touchstart', this);
     this.seekRegion.addEventListener('touchmove', this);
     this.seekRegion.addEventListener('touchend', this);
+    this.seekSlider.addEventListener('keypress', this);
     this.previousControl.addEventListener('touchend', this);
     this.nextControl.addEventListener('touchend', this);
 
@@ -248,7 +250,7 @@ var PlayerView = {
     this.offscreenImage.src = '';
     this.coverImage.classList.remove('fadeIn');
 
-    AlbumArt.getCoverURL(fileinfo).then(function(url) {
+    AlbumArtCache.getCoverURL(fileinfo).then(function(url) {
       this.offscreenImage.addEventListener('load', pv_showImage.bind(this));
       this.offscreenImage.src = url;
     }.bind(this));
@@ -273,15 +275,17 @@ var PlayerView = {
   },
 
   setRepeat: function pv_setRepeat(value) {
-    var repeatClasses = ['repeat-off', 'repeat-list', 'repeat-song'];
+    var repeatModes = ['repeat-off', 'repeat-list', 'repeat-song'];
 
     // Remove all repeat classes before applying a new one
-    repeatClasses.forEach(function pv_resetRepeat(targetClass) {
+    repeatModes.forEach(function pv_resetRepeat(targetClass) {
       this.repeatButton.classList.remove(targetClass);
     }.bind(this));
 
     this.repeatOption = value;
-    this.repeatButton.classList.add(repeatClasses[this.repeatOption]);
+    this.repeatButton.classList.add(repeatModes[this.repeatOption]);
+    this.repeatButton.setAttribute(
+      'data-l10n-id', repeatModes[this.repeatOption]);
   },
 
   setShuffle: function pv_setShuffle(value, index) {
@@ -300,11 +304,18 @@ var PlayerView = {
     } else {
       this.shuffleButton.classList.remove('shuffle-on');
     }
+    this.shuffleButton.setAttribute('aria-pressed', this.shuffleOption);
   },
 
   setRatings: function pv_setRatings(rated) {
     for (var i = 0; i < 5; i++) {
       var rating = this.ratings[i];
+
+      if (i === rated - 1) {
+          rating.setAttribute('aria-checked', true);
+      } else {
+          rating.setAttribute('aria-checked', false);
+      }
 
       if (i < rated) {
         rating.classList.add('star-on');
@@ -361,11 +372,11 @@ var PlayerView = {
       callback(metadata);
     }
     function pv_metadataError(e) {
+      console.warn('parseAudioMetadata: error parsing metadata - ', e);
       /* jshint validthis:true */
       if (this.onerror) {
         this.onerror(e);
       }
-      console.warn('parseAudioMetadata: error parsing metadata - ', e);
     }
   },
 
@@ -429,7 +440,7 @@ var PlayerView = {
     // picture. If .picture is null, something went wrong and listeners should
     // probably use a blank picture (or their own placeholder).
     if (this.audio.currentTime === 0) {
-      AlbumArt.getCoverBlob(fileinfo).then(function(blob) {
+      AlbumArtCache.getCoverBlob(fileinfo).then(function(blob) {
         notifyMetadata.picture = blob;
         MusicComms.notifyMetadataChanged(notifyMetadata);
       });
@@ -702,6 +713,7 @@ var PlayerView = {
     this.isTouching = this.isFastSeeking = true;
     var offset = direction * 2;
 
+    this.prevPlayStatus = this.playStatus;
     this.playStatus = direction ? PLAYSTATUS_FWD_SEEK : PLAYSTATUS_REV_SEEK;
     this.updateRemotePlayStatus();
 
@@ -716,8 +728,9 @@ var PlayerView = {
       window.clearInterval(this.intervalID);
     }
 
-    // After we cancel the fast seeking, an 'playing' will be fired,
-    // so that we don't have to update the remote play status here.
+    this.playStatus = this.prevPlayStatus;
+    this.prevPlayStatus = null;
+    this.updateRemotePlayStatus();
   },
 
   updateSeekBar: function pv_updateSeekBar() {
@@ -738,7 +751,10 @@ var PlayerView = {
 
   seekAudio: function pv_seekAudio(seekTime) {
     if (seekTime !== undefined) {
-      this.audio.currentTime = seekTime;
+      // Because of bug 1119186, setting the currentTime to a value as same as
+      // the audio.duration seems corrupts the audio element, so here we floor
+      // the seek time to prevent it.
+      this.audio.currentTime = Math.floor(seekTime);
     }
 
     var startTime = this.audio.startTime;
@@ -762,9 +778,21 @@ var PlayerView = {
   },
 
   setSeekBar: function pv_setSeekBar(startTime, endTime, currentTime) {
+    if (this.seekBar.max != endTime) {
+      // Duration changed, update accessibility label.
+      navigator.mozL10n.setAttributes(this.seekSlider,
+        'playbackSeekBar', {'duration': formatTime(endTime)});
+    }
+
     this.seekBar.min = startTime;
     this.seekBar.max = endTime;
     this.seekBar.value = currentTime;
+
+    var formattedCurrentTime = formatTime(currentTime);
+    // Adjust values for accessibility
+    this.seekSlider.setAttribute('aria-valuetext', formattedCurrentTime);
+    this.seekSlider.setAttribute('aria-valuemax', endTime);
+    this.seekSlider.setAttribute('aria-valuenow', currentTime);
 
     // if endTime is 0, that's a reset of seekBar
     var ratio = (endTime !== 0) ? (currentTime / endTime) : 0;
@@ -785,7 +813,7 @@ var PlayerView = {
 
     this.seekIndicator.style.transform = 'translateX(' + x + ')';
 
-    this.seekElapsed.textContent = formatTime(currentTime);
+    this.seekElapsed.textContent = formattedCurrentTime;
     var remainingTime = endTime - currentTime;
     // Check if there is remaining time to show, avoiding to display "-00:00"
     // while song is loading (Bug 833710)
@@ -805,7 +833,7 @@ var PlayerView = {
     }
 
     musicdb.getFile(songData.name, function(file) {
-      AlbumArt.getCoverBlob(songData).then(function(pictureBlob) {
+      AlbumArtCache.getCoverBlob(songData).then(function(pictureBlob) {
         var filename = songData.name,
         name = filename.substring(filename.lastIndexOf('/') + 1);
 
@@ -920,10 +948,10 @@ var PlayerView = {
             this.showInfo();
             break;
           case 'player-controls-play':
-            if (this.playStatus === PLAYSTATUS_PLAYING) {
-              this.pause();
-            } else {
+            if (this.playControl.classList.contains('is-pause')) {
               this.play();
+            } else {
+              this.pause();
             }
             break;
           case 'player-album-repeat':
@@ -974,11 +1002,13 @@ var PlayerView = {
         this.playControl.classList.remove('is-pause');
         // The play event is fired when audio playback has begun.
         this.playStatus = PLAYSTATUS_PLAYING;
+        this.playControl.setAttribute('data-l10n-id', 'playbackPause');
         this.updateRemotePlayStatus();
         break;
       case 'pause':
         this.playControl.classList.add('is-pause');
         this.playStatus = PLAYSTATUS_PAUSED;
+        this.playControl.setAttribute('data-l10n-id', 'playbackPlay');
         this.updateRemotePlayStatus();
         break;
       case 'touchstart':
@@ -1024,6 +1054,21 @@ var PlayerView = {
           this.previous();
         } else if (target.id === 'player-controls-next') {
           this.next();
+        }
+        break;
+      case 'keypress':
+        // The standard accessible control for sliders is arrow up/down keys.
+        // Our screenreader synthesizes those events on swipe up/down gestures.
+        // Currently, we only allow screen reader users to adjust sliders with a
+        // constant step size (there is no page up/down equivalent). In the case
+        // of music, we make sure that the maximum amount of steps for the
+        // entire duration is 20, or 2 second increments if the duration is less
+        // then 40 seconds.
+        var step = Math.max(this.audio.duration / 20, 2);
+        if (evt.keyCode == evt.DOM_VK_DOWN) {
+          this.seekAudio(this.audio.currentTime - step);
+        } else if (evt.keyCode == evt.DOM_VK_UP) {
+          this.seekAudio(this.audio.currentTime + step);
         }
         break;
       case 'contextmenu':

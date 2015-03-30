@@ -1222,6 +1222,20 @@ MailUniverse.prototype = {
       switch (op.localStatus) {
         case 'doing':
           op.localStatus = 'done';
+          // We have introduced the ability for a local op to decide that it
+          // no longer wants a server operation to happen.  It accomplishes this
+          // by marking the serverStatus as skip, which we then process and
+          // convert to 'n/a'.  This is intended to be done by the local job
+          // right before returning so the value doesn't get surfaced elsewhere.
+          // Some might ask why this isn't some type of explicit return value.
+          // To those people I say, "Good point, shut up."  I might then go on
+          // to say that the v3 refactor will likely deal with this and that's
+          // real soon.
+          if (op.serverStatus === 'skip') {
+            removeFromServerQueue = true;
+            op.serverStatus = 'n/a';
+            accountSaveSuggested = true; // this op change needs a save!
+          }
           if (op.serverStatus === 'n/a') {
             op.lifecycle = 'done';
             completeOp = true;
@@ -1229,6 +1243,11 @@ MailUniverse.prototype = {
           break;
         case 'undoing':
           op.localStatus = 'undone';
+          if (op.serverStatus === 'skip') {
+            removeFromServerQueue = true;
+            op.serverStatus = 'n/a';
+            accountSaveSuggested = true; // this op change needs a save!
+          }
           if (op.serverStatus === 'n/a') {
             op.lifecycle = 'undone';
             completeOp = true;
@@ -1745,9 +1764,21 @@ MailUniverse.prototype = {
    *
    * This request is persistent although the callback will obviously be
    * discarded in the event the app is killed.
+   *
+   * @param {String[]} relPartIndices
+   *     The part identifiers of any related parts to be saved to IndexedDB.
+   * @param {String[]} attachmentIndices
+   *     The part identifiers of any attachment parts to be saved to
+   *     DeviceStorage.  For each entry in this array there should be a
+   *     corresponding boolean in registerWithDownloadManager.
+   * @param {Boolean[]} registerAttachments
+   *     An array of booleans corresponding to each entry in attachmentIndices
+   *     indicating whether the download should be registered with the download
+   *     manager.
    */
   downloadMessageAttachments: function(messageSuid, messageDate,
                                        relPartIndices, attachmentIndices,
+                                       registerAttachments,
                                        callback) {
     var account = this.getAccountForMessageSuid(messageSuid);
     var longtermId = this._queueAccountOp(
@@ -1763,7 +1794,8 @@ MailUniverse.prototype = {
         messageSuid: messageSuid,
         messageDate: messageDate,
         relPartIndices: relPartIndices,
-        attachmentIndices: attachmentIndices
+        attachmentIndices: attachmentIndices,
+        registerAttachments: registerAttachments
       },
       callback);
   },

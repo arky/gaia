@@ -163,7 +163,7 @@ ol, ul {
 }
 
 .log-item .primary-info {
-  text-overflow: ellipsis;
+  display: flex;
 }
 
 .log-item a > p {
@@ -175,7 +175,13 @@ ol, ul {
 }
 
 .log-item .primary-info-main {
+  min-width: 0;
+}
+
+.log-item .primary-info-main bdi {
+  display: block;
   overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -282,9 +288,13 @@ html[dir="rtl"] .icon-container {
 }
 
 html[dir="rtl"] .recents-edit .pack-checkbox.call-log-selection {
-  transform: translateX(-5rem);
+  transform: translateX(-4rem);
 }
 
 html[dir="rtl"] .recents-edit .log-item a {
   transform: translateX(-3rem);
+}
+
+html[dir="rtl"] #sticky {
+  background-position: calc(100% - 1.5rem) 0;
 }

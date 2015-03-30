@@ -72,8 +72,6 @@ var FindMyDevice = {
       onlogout: self._onLogout.bind(self),
       onerror: self._onFxAError.bind(self)
     });
-
-    this._observeSettings();
   },
 
   _observeSettings: function fmd_observe_settings() {
@@ -103,6 +101,7 @@ var FindMyDevice = {
     });
 
     this._fxaReady = true;
+    this._observeSettings();
   },
 
   _loadState: function fmd_load_state(callback) {
@@ -588,6 +587,11 @@ var FindMyDevice = {
 
   _countRegistrationRetry: function fmd_count_registration_retry (){
     this._scheduleAlarm('retry');
+
+    if (!navigator.onLine) {
+      return;
+    }
+
     if (!this._registered) {
       var countHelper = SettingsHelper('findmydevice.retry-count');
 
@@ -651,4 +655,4 @@ var FindMyDevice = {
   }
 };
 
-navigator.mozL10n.once(FindMyDevice.init.bind(FindMyDevice));
+FindMyDevice.init();

@@ -1,18 +1,17 @@
-/* -*- Mode: js; js-indent-level: 2; indent-tabs-mode: nil -*- */
-/* vim: set shiftwidth=2 tabstop=2 autoindent cindent expandtab: */
-
+/* global SettingsListener, SystemBanner */
+/* exported CrashReporter */
 'use strict';
 
 // This file calls getElementById without waiting for an onload event, so it
 // must have a defer attribute or be included at the end of the <body>.
-
 var CrashReporter = (function() {
   var _ = navigator.mozL10n.get;
   var settings = navigator.mozSettings;
   var screen = document.getElementById('screen');
 
-  // The name of the app that just crashed.
-  var crashedAppName = '';
+  // The name of the app that just crashed. We'll have special handling for
+  // when this remains null or is set to null.
+  var crashedAppName = null;
 
   // Whether or not to show a "Report" button in the banner.
   var showReportButton = false;
@@ -30,8 +29,11 @@ var CrashReporter = (function() {
     if (isChrome) {
       navigator.mozL10n.setAttributes(elem, 'crash-dialog-os2');
     } else {
-      navigator.mozL10n.setAttributes(elem,
-        'crash-dialog-app', { name: crashedAppName });
+      navigator.mozL10n.setAttributes(
+        elem,
+        'crash-dialog-app',
+        { name: crashedAppName || _('crash-dialog-app-noname') }
+      );
     }
 
     // "Don't Send Report" button in dialog
@@ -81,8 +83,9 @@ var CrashReporter = (function() {
   }
 
   function showBanner(crashID, isChrome) {
+    var appName = crashedAppName || _('crash-dialog-app-noname');
     var message = isChrome ? _('crash-banner-os2') :
-      _('crash-banner-app', { name: crashedAppName });
+      _('crash-banner-app', { name: appName });
 
     var button = null;
     if (showReportButton) {
@@ -164,6 +167,8 @@ var CrashReporter = (function() {
   window.addEventListener('searchcrashed', handleAppCrash);
 
   return {
+    handleCrash: handleCrash,
+    handleAppCrash: handleAppCrash,
     setAppName: setAppName
   };
 })();

@@ -2,9 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from marionette import expected
-from marionette import Wait
-from marionette.by import By
+from marionette_driver import expected, By, Wait
 from gaiatest.apps.base import Base
 
 
@@ -87,6 +85,12 @@ class Settings(Base):
         Wait(self.marionette).until(expected.element_displayed(reset_mobile_usage))
         reset_dialog = self.marionette.find_element(*self._reset_dialog_locator)
         reset_mobile_usage.tap()
+
+        confirm_reset_button = Wait(self.marionette).until(
+            expected.element_present(*self._confirm_reset_button_locator))
+        Wait(self.marionette).until(expected.element_displayed(confirm_reset_button))
+        confirm_reset_button.tap()
+
         Wait(self.marionette).until(expected.element_not_displayed(reset_dialog))
 
     def tap_done(self):

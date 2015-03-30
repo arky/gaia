@@ -1,3 +1,5 @@
+'use strict';
+/* global Downsample, VideoPlayer */
 /*
  * media_frame.js:
  *
@@ -40,15 +42,34 @@
 function MediaFrame(container, includeVideo, maxImageSize) {
   this.clear(); // Set all the properties we'll use to default values
 
-  if (typeof container === 'string')
+  if (typeof container === 'string') {
     container = document.getElementById(container);
+  }
   this.container = container;
   this.maximumImageSize = maxImageSize || 0;
   if (includeVideo !== false) {
     this.video = new VideoPlayer(container);
     this.video.hide();
   }
+
+  // Add a class to the container so we could find it later and use it as
+  // a key in the instance weakmap.
+  container.classList.add('media-frame');
+  MediaFrame.instancesToLocalize.set(container, this);
 }
+
+// WeakMap with the container nodes as keys and MediaFrame instances as values.
+MediaFrame.instancesToLocalize = new WeakMap();
+
+navigator.mozL10n.ready(function() {
+  // Retrieve MediaFrame instances by searching for container nodes.
+  for (var container of document.querySelectorAll('.media-frame')) {
+    var instance = MediaFrame.instancesToLocalize.get(container);
+    if (instance) {
+      instance.localize();
+    }
+  }
+});
 
 MediaFrame.computeMaxImageDecodeSize = function(mem) {
   if (!mem) {
@@ -134,6 +155,7 @@ MediaFrame.prototype.displayImage = function displayImage(blob,
   // It would be nice if users of this module could override this
   // background color.
   this.image.style.backgroundColor = '#222';
+  this.image.setAttribute('role', 'img');
 
   // Figure out if we are going to downsample the image before displaying it
   // We expose fullSampleSize as part of the public api only for testing.
@@ -154,23 +176,33 @@ MediaFrame.prototype.displayImage = function displayImage(blob,
   // Keep track of what kind of content we have
   this.displayingImage = true;
 
+  // If a locale is present and ready, go ahead and localize now.
+  // Otherwise, localization will be handled by the ready() callback above.
+  if (navigator.mozL10n.readyState === 'complete') {
+    this.localize();
+  }
+
   // Determine whether we can use the preview image
   function usePreview(preview) {
     // If no preview at all, we can't use it.
-    if (!preview)
+    if (!preview) {
       return false;
+    }
 
     // If we don't know the preview size, we can't use it.
-    if (!preview.width || !preview.height)
+    if (!preview.width || !preview.height) {
       return false;
+    }
 
     // If there isn't a preview offset or file, we can't use it
-    if (!preview.start && !preview.filename)
+    if (!preview.start && !preview.filename) {
       return false;
+    }
 
     // If the aspect ratio does not match, we can't use it
-    if (Math.abs(width / height - preview.width / preview.height) > 0.01)
+    if (Math.abs(width / height - preview.width / preview.height) > 0.01) {
       return false;
+    }
 
     // If setMinimumPreviewSize has been called, then a preview is big
     // enough if it is at least that big.
@@ -182,7 +214,7 @@ MediaFrame.prototype.displayImage = function displayImage(blob,
     }
 
     // Otherwise a preview is big enough if at least one dimension is >= the
-    // screen size in both portait and landscape mode.
+    // screen size in both portrait and landscape mode.
     var screenWidth = window.innerWidth * window.devicePixelRatio;
     var screenHeight = window.innerHeight * window.devicePixelRatio;
 
@@ -346,7 +378,7 @@ MediaFrame.prototype._displayImage = function(backgroundImage, width, height) {
   this.image.style.height = height + 'px';
 
   // Remember the width and height, but swap them for rotated images.
-  if (this.rotation == 0 || this.rotation == 180) {
+  if (this.rotation === 0 || this.rotation === 180) {
     this.itemWidth = width;
     this.itemHeight = height;
   } else {
@@ -361,13 +393,48 @@ MediaFrame.prototype._displayImage = function(backgroundImage, width, height) {
   // Query the position of the image in order to flush the changes
   // made by setPosition() above. This prevents us from accidentally
   // animating those changes when the user double taps to zoom.
-  var temp = this.image.clientLeft;
+  var temp = this.image.clientLeft; // jshint ignore:line
 };
 
+// This function adds a label for accessibility to the image frame.
+// Videos are localized within the video player, so this is only for images.
+MediaFrame.prototype.localize = function localize() {
+  if (!this.displayingImage) {
+    return;
+  }
+
+  var portrait = this.fullsizeWidth < this.fullsizeHeight;
+  if (this.rotation == 90 || this.rotation == 270) {
+    // If rotated sideways, the width and height are swapped.
+    portrait = !portrait;
+  }
+
+  var timestamp = this.imageblob.lastModifiedDate;
+  var orientation = navigator.mozL10n.get(
+    portrait ? 'orientationPortrait' : 'orientationLandscape');
+  var label = '';
+
+  if (timestamp) {
+    var locale_entry = navigator.mozL10n.get(
+      'imageDescription', { orientation: orientation });
+
+    if (!this.dtf) {
+      this.dtf = new navigator.mozL10n.DateTimeFormat();
+    }
+
+    label = this.dtf.localeFormat(new Date(timestamp), locale_entry);
+  } else {
+    label = navigator.mozL10n.get(
+      'imageDescriptionNoTimestamp', { orientation: orientation });
+  }
+
+  this.image.setAttribute('aria-label', label);
+};
 
 MediaFrame.prototype._switchToFullSizeImage = function _switchToFull() {
-  if (!this.displayingImage || !this.displayingPreview)
+  if (!this.displayingImage || !this.displayingPreview) {
     return;
+  }
   this.displayingPreview = false;
   this._displayImage(this.fullBackgroundImage,
                      this.fullsizeWidth, this.fullsizeHeight);
@@ -390,8 +457,9 @@ MediaFrame.prototype.displayVideo = function displayVideo(videoblob, posterblob,
                                                           width, height,
                                                           rotation)
 {
-  if (!this.video)
+  if (!this.video) {
     return;
+  }
 
   this.clear();  // reset everything
 
@@ -409,7 +477,8 @@ MediaFrame.prototype.displayVideo = function displayVideo(videoblob, posterblob,
   // Display them in the video element.
   // The VideoPlayer class takes care of positioning itself, so we
   // don't have to do anything here with computeFit() or setPosition()
-  this.video.load(this.videourl, this.posterurl, width, height, rotation || 0);
+  this.video.load(this.videourl, this.posterurl, width, height, rotation || 0,
+                  videoblob.lastModifiedDate);
 
   // Show the player controls
   this.video.show();
@@ -452,11 +521,13 @@ MediaFrame.prototype.clear = function clear() {
   if (this.video) {
     this.video.reset();
     this.video.hide();
-    if (this.videourl)
+    if (this.videourl) {
       URL.revokeObjectURL(this.videourl);
+    }
     this.videourl = null;
-    if (this.posterurl)
+    if (this.posterurl) {
       URL.revokeObjectURL(this.posterurl);
+    }
     this.posterurl = null;
   }
 };
@@ -465,8 +536,9 @@ MediaFrame.prototype.clear = function clear() {
 // The VideoPlayer object fits itself to its container, and it
 // can't be zoomed or panned, so we only need to do this for images
 MediaFrame.prototype.setPosition = function setPosition() {
-  if (!this.fit || !this.displayingImage)
+  if (!this.fit || !this.displayingImage) {
     return;
+  }
 
   var dx = this.fit.left, dy = this.fit.top;
 
@@ -499,8 +571,9 @@ MediaFrame.prototype.setPosition = function setPosition() {
 };
 
 MediaFrame.prototype.computeFit = function computeFit() {
-  if (!this.displayingImage)
+  if (!this.displayingImage) {
     return;
+  }
   this.viewportWidth = this.container.offsetWidth;
   this.viewportHeight = this.container.offsetHeight;
 
@@ -535,8 +608,9 @@ MediaFrame.prototype.reset = function reset() {
   this.computeFit();
   this.setPosition();
   // If frame is resized, the video's size also need to reset.
-  if (this.displayingVideo)
+  if (this.displayingVideo) {
     this.video.setPlayerSize();
+  }
 };
 
 // We call this from the resize handler when the user rotates the
@@ -556,8 +630,9 @@ MediaFrame.prototype.resize = function resize() {
 
   // If this is triggered by a resize event before the frame has computed
   // its size, then there is nothing we can do yet.
-  if (!oldfit)
+  if (!oldfit) {
     return;
+  }
 
   // Compute the new fit.
   // This updates the the viewportWidth, viewportHeight and fit properties
@@ -597,12 +672,14 @@ MediaFrame.prototype.resize = function resize() {
 // to animate the zoom.
 MediaFrame.prototype.zoom = function zoom(scale, fixedX, fixedY, time) {
   // Ignore zooms if we're not displaying an image
-  if (!this.displayingImage)
+  if (!this.displayingImage) {
     return;
+  }
 
   // If we were displaying the preview switch to the full-size image.
-  if (this.displayingPreview)
+  if (this.displayingPreview) {
     this._switchToFullSizeImage();
+  }
 
   // Never zoom in farther than the native resolution of the image
   if (this.fit.scale * scale > 1) {
@@ -641,8 +718,9 @@ MediaFrame.prototype.zoom = function zoom(scale, fixedX, fixedY, time) {
   }
   else {
     // Don't let the left of the photo be past the left edge of the screen
-    if (this.fit.left > 0)
+    if (this.fit.left > 0) {
       this.fit.left = 0;
+    }
 
     // Right of photo shouldn't be to the left of the right edge
     if (this.fit.left + this.fit.width < this.viewportWidth) {
@@ -655,8 +733,9 @@ MediaFrame.prototype.zoom = function zoom(scale, fixedX, fixedY, time) {
   }
   else {
     // Don't let the top of the photo be below the top of the screen
-    if (this.fit.top > 0)
+    if (this.fit.top > 0) {
       this.fit.top = 0;
+    }
 
     // bottom of photo shouldn't be above the bottom of screen
     if (this.fit.top + this.fit.height < this.viewportHeight) {
@@ -696,12 +775,14 @@ MediaFrame.prototype.pan = function(dx, dy) {
     this.fit.top += dy;
 
     // Don't let the top of the photo be below the top of the screen
-    if (this.fit.top > 0)
+    if (this.fit.top > 0) {
       this.fit.top = 0;
+    }
 
     // bottom of photo shouldn't be above the bottom of screen
-    if (this.fit.top + this.fit.height < this.viewportHeight)
+    if (this.fit.top + this.fit.height < this.viewportHeight) {
       this.fit.top = this.viewportHeight - this.fit.height;
+    }
   }
 
   // Now handle the X dimension. If we've already panned as far as we can

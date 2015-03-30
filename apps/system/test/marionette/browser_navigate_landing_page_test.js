@@ -10,10 +10,6 @@ marionette('Browser - Navigating from the landing page',
   var client = marionette.client({
     prefs: {
       'dom.w3c_touch_events.enabled': 1
-    },
-    settings: {
-      'ftu.manifestURL': null,
-      'lockscreen.enabled': false
     }
   });
 
@@ -36,8 +32,6 @@ marionette('Browser - Navigating from the landing page',
     search = client.loader.getAppClass('search');
     system = client.loader.getAppClass('system');
     system.waitForStartup();
-
-    search.removeGeolocationPermission();
   });
 
   test('navigates the landing page in place', function() {

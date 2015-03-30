@@ -10,8 +10,6 @@ marionette('Software Home Button - Permission Prompt', function() {
       'dom.w3c_touch_events.enabled': 1
     },
     settings: {
-      'ftu.manifestURL': null,
-      'lockscreen.enabled': false,
       'software-button.enabled': true
     }
   });
@@ -27,9 +25,11 @@ marionette('Software Home Button - Permission Prompt', function() {
   });
 
   test('Proper layout for the prompt', function() {
-
-    rocketbar.homescreenFocus();
-    rocketbar.enterText('a');
+    // Execute some JS to open the permission prompt.
+    client.executeScript(function() {
+      navigator.geolocation.getCurrentPosition(
+        function(){});
+    });
 
     function rect(el) {
       return el.getBoundingClientRect();

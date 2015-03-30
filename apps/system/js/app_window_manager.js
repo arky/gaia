@@ -1,5 +1,5 @@
 /* global SettingsListener, homescreenWindowManager, inputWindowManager,
-          layoutManager, Service, NfcHandler, rocketbar, ShrinkingUI,
+          layoutManager, Service, rocketbar, ShrinkingUI,
           FtuLauncher */
 'use strict';
 
@@ -40,12 +40,16 @@
     setHierarchy: function(active) {
       if (!this._activeApp) {
         this.debug('No active app.');
-        return;
+        return false;
       }
       if (active) {
         this.focus();
+      } else {
+        this._activeApp.blur();
+        this._activeApp.setNFCFocus(false);
       }
       this._activeApp.setVisibleForScreenReader(active);
+      return true;
     },
 
     focus: function() {
@@ -54,6 +58,7 @@
       }
       this.debug('focusing ' + this._activeApp.name);
       this._activeApp.focus();
+      this._activeApp.setNFCFocus(true);
     },
 
     /**
@@ -308,6 +313,7 @@
         this.element.classList.remove('slow-transition');
       }
       window.addEventListener('cardviewbeforeshow', this);
+      window.addEventListener('cardviewshown', this);
       window.addEventListener('cardviewclosed', this);
       window.addEventListener('launchapp', this);
       window.addEventListener('appcreated', this);
@@ -345,7 +351,9 @@
       window.addEventListener('permissiondialoghide', this);
       window.addEventListener('appopening', this);
       window.addEventListener('localized', this);
+      window.addEventListener('launchtrusted', this);
       window.addEventListener('taskmanager-activated', this);
+      window.addEventListener('hierarchytopmostwindowchanged', this);
 
       this._settingsObserveHandler = {
         // continuous transition controlling
@@ -367,21 +375,6 @@
               this.broadcastMessage('kill_suspended');
             }
           }.bind(this)
-        },
-
-        'nfc.enabled': {
-          defaultValue: false,
-          callback: (value) => {
-            if (!this._nfcHandler) {
-              this._nfcHandler = new NfcHandler(this);
-            }
-
-            if (value) {
-              this._nfcHandler.start();
-            } else {
-              this._nfcHandler.stop();
-            }
-          }
         }
       };
 
@@ -402,6 +395,7 @@
      */
     stop: function awm_stop() {
       window.removeEventListener('cardviewbeforeshow', this);
+      window.removeEventListener('cardviewshown', this);
       window.removeEventListener('cardviewclosed', this);
       window.removeEventListener('launchapp', this);
       window.removeEventListener('appcreated', this);
@@ -433,6 +427,8 @@
       window.removeEventListener('shrinking-start', this);
       window.removeEventListener('shrinking-stop', this);
       window.removeEventListener('taskmanager-activated', this);
+      window.removeEventListener('launchtrusted', this);
+      window.removeEventListener('hierarchytopmostwindowchanged', this);
 
       for (var name in this._settingsObserveHandler) {
         SettingsListener.unobserve(
@@ -488,11 +484,18 @@
       var activeApp = this._activeApp;
       var detail = evt.detail;
       switch (evt.type) {
+        case 'hierarchytopmostwindowchanged':
+          if (Service.query('getTopMostUI') !== this) {
+            return;
+          }
+          this._activeApp && this._activeApp.getTopMostWindow()
+                                 .setNFCFocus(true);
+          break;
         case 'shrinking-start':
           if (this.shrinkingUI && this.shrinkingUI.isActive()) {
             return;
           }
-          if (this._activeApp.isTransitioning()) {
+          if (Service.query('getTopMostUI') !== this) {
             return;
           }
           var bottomMost = this._activeApp.getBottomMostWindow();
@@ -511,7 +514,8 @@
           activeApp && activeApp.broadcast('focus');
           break;
         case 'orientationchange':
-          this.broadcastMessage(evt.type);
+          this.broadcastMessage(evt.type,
+            Service.query('getTopMostUI') === this);
           break;
 
         // Dispatch internal events for navigation usage.
@@ -543,6 +547,11 @@
           break;
 
         case 'ftuskip':
+          // There is an app being launched before
+          // ftu is skipped; this happens while setting runapp=XXX
+          if (this._activeApp && !this._activeApp.isHomescreen) {
+            return;
+          }
           if (!Service.locked) {
             this.display();
           }
@@ -630,11 +639,20 @@
           this.launch(config);
           break;
 
+        case 'launchtrusted':
+          if (evt.detail.chromeId) {
+            this._launchTrustedWindow(evt);
+          }
+          break;
         case 'cardviewbeforeshow':
           if (this._activeApp) {
             this._activeApp.getTopMostWindow().blur();
           }
           this.broadcastMessage('cardviewbeforeshow');
+          break;
+
+        case 'cardviewshown':
+          this.broadcastMessage('cardviewshown');
           break;
 
         case 'cardviewclosed':
@@ -686,6 +704,12 @@
         return false;
       }
       return true;
+    },
+
+    _launchTrustedWindow: function(evt) {
+      if (this._activeApp) {
+        this._activeApp.broadcast('launchtrusted', evt.detail);
+      }
     },
 
     _dumpAllWindows: function() {
@@ -762,7 +786,7 @@
       var callee = this.getApp(config.origin);
       caller = this._activeApp.getTopMostWindow();
       if (caller.getBottomMostWindow() === callee) {
-        callee.frontWindow.kill();
+        callee.frontWindow && callee.frontWindow.kill();
       } else {
         callee.callerWindow = caller;
         caller.calleeWindow = callee;
@@ -818,15 +842,13 @@
         activated = true;
       } else if (!appHasChanged && this._activeApp && !this.activated) {
         activated = true;
-      } 
+      }
 
       this._activeApp = this._apps[instanceID];
       if (!this._activeApp) {
         this.debug('no active app alive: ' + instanceID);
         return;
       }
-      var fullscreen = this._activeApp.isFullScreen();
-      this.screen.classList.toggle('fullscreen-app', fullscreen);
 
       var fullScreenLayout = this._activeApp.isFullScreenLayout();
       this.screen.classList.toggle('fullscreen-layout-app', fullScreenLayout);

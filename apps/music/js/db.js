@@ -1,6 +1,7 @@
 /* exported musicdb, initDB */
-/* global App, AudioMetadata, LazyLoader, MediaDB, ModeManager, MODE_LIST,
-          MODE_PICKER, MODE_TILES, MusicComms, PlayerView, TabBar, TilesView */
+/* global AlbumArt, App, AudioMetadata, LazyLoader, MediaDB, ModeManager,
+   MODE_LIST, MODE_PICKER, MODE_TILES, MusicComms, PlayerView, TabBar,
+   TilesView */
 'use strict';
 
 // The MediaDB object that manages the filesystem and the database of metadata
@@ -39,9 +40,14 @@ function initDB() {
   });
 
   function metadataParserWrapper(file, onsuccess, onerror) {
-    LazyLoader.load('js/metadata_scripts.js', function() {
-      AudioMetadata.parse(file).then(onsuccess, onerror);
-    });
+    LazyLoader.load(
+      ['/js/metadata_scripts.js', '/js/metadata/album_art.js'],
+      function() {
+        AudioMetadata.parse(file).then(function(metadata) {
+          return AlbumArt.process(file, metadata);
+        }).then(onsuccess, onerror);
+      }
+    );
   }
 
   function updateRecord(record, oldVersion, newVersion) {
@@ -65,12 +71,6 @@ function initDB() {
   // show dialog in upgradestart, when it finished, it will turned to ready.
   musicdb.onupgrading = function(event) {
     App.showOverlay('upgrade');
-
-    if (event.detail.oldClientVersion === 2) {
-      // We want to delete asyncStorage, which was used in version 2 to cache
-      // album art.
-      window.indexedDB.deleteDatabase('asyncStorage');
-    }
   };
 
   // This is called when DeviceStorage becomes unavailable because the
@@ -182,6 +182,7 @@ function initDB() {
     // that we finished loading everything.
     if (!firstScanDone) {
       firstScanDone = true;
+      window.performance.mark('fullyLoaded');
       window.dispatchEvent(new CustomEvent('moz-app-loaded'));
     }
   };

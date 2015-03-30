@@ -46,6 +46,7 @@ button::-moz-focus-inner {
 .keyboard-row {
   text-align: center;
   font-size: 0;
+  display: flex;
 }
 .row1 {
   background-color: #5b6668;
@@ -93,6 +94,7 @@ button::-moz-focus-inner {
   /* In case the keys are nested, for example in the alt char menu,
      they need to be tappable. */
   pointer-events: auto;
+  flex: auto;
 }
 
 /* Visible keys */
@@ -144,7 +146,7 @@ button::-moz-focus-inner {
   background-color: #00aacc;
   visibility: hidden;
 
-  /* To override the text-align in .float-key-first and .float-key-last */
+  /* To override the text-align in .keyboard-key:first-child or :last-child */
   text-align: center;
 }
 
@@ -440,7 +442,6 @@ bubble above the key when you tap and hold. */
 }
 
 .keyboard-candidate-panel {
-  display: block;
   background: #252220;
   padding: 0;
   margin: 0.2rem 0 0.2rem 0;
@@ -454,8 +455,6 @@ bubble above the key when you tap and hold. */
 }
 
 #keyboard.full-candidate-panel .keyboard-candidate-panel {
-  overflow-y: auto;
-
   position: absolute;
   top: 0.1rem;
   height: -moz-calc(100% - 0.4rem);
@@ -464,7 +463,6 @@ bubble above the key when you tap and hold. */
 }
 
 .keyboard-candidate-panel-toggle-button {
-  display: none;
   z-index: 1;
   position: absolute;
   right: 0;
@@ -473,17 +471,29 @@ bubble above the key when you tap and hold. */
   height: 2.8rem;
   background: #252220 url('images/icon_extend.png') center center no-repeat;
   background-size: 2.4rem;
+  min-width: 4rem;
+}
+
+.keyboard-candidate-panel-toggle-button.hide {
+  visibility: hidden;
 }
 
 #keyboard.full-candidate-panel .keyboard-candidate-panel-toggle-button {
   background-image: url('images/icon_close.png');
+  top: 0;
+}
+
+#keyboard.full-candidate-panel .suggestions-container {
+  overflow-y: auto;
+  height: 100%;
 }
 
 .keyboard-candidate-panel .candidate-row {
   border-top: 0.1rem solid #000000;
+  display: flex;
 }
 
-.keyboard-candidate-panel .candidate-row-first {
+.keyboard-candidate-panel .candidate-row:first-child {
   border-top: none;
 }
 
@@ -492,7 +502,7 @@ bubble above the key when you tap and hold. */
 }
 
 #keyboard.candidate-panel .keyboard-candidate-panel .candidate-row-first {
-  display: block;
+  display: flex;
 }
 
 .keyboard-candidate-panel-toggle-button.highlighted,
@@ -503,10 +513,6 @@ bubble above the key when you tap and hold. */
 
 .keyboard-candidate-panel .candidate-row span {
   display: inline-block;
-  margin: 0;
-  padding: 0 2px 0 0;
-  min-width: -moz-calc(4rem - 2px);
-  height: 2.8rem;
   font-size: 2rem;
   color: #a6a6a6;
   text-align: center;
@@ -514,6 +520,13 @@ bubble above the key when you tap and hold. */
   background: transparent url('images/divider.png') right center no-repeat;
   background-size: auto 4rem;
   border: none;
+  flex: auto;
+}
+
+/* Dummy element for flex box to look like a grid */
+.keyboard-candidate-panel .candidate-row span:empty {
+  border: none;
+  background: none;
 }
 
 .keyboard-candidate-panel.vietnamese .candidate-row span {
@@ -534,7 +547,7 @@ bubble above the key when you tap and hold. */
   overflow: hidden;
 }
 
-.full-candidate-panel .keyboard-candidate-panel[data-truncated]::after {
+.full-candidate-panel .keyboard-candidate-panel[data-truncated] .suggestions-container::after {
   content: '…';
   background: none ! important;
   border-color: transparent ! important;
@@ -563,9 +576,10 @@ bubble above the key when you tap and hold. */
   overflow: hidden;
   white-space: nowrap;
   width: 100%;
+  pointer-events: none;
 }
 
-.keyboard-candidate-panel.latin span.autocorrect {
+.keyboard-candidate-panel.latin div.autocorrect span {
   color: #0ac;
 }
 
@@ -616,10 +630,10 @@ bubble above the key when you tap and hold. */
 
 /* Increase tap area for first / last keys in a row that
   doesn't fill full width */
-.keyboard-key.float-key-first {
+.keyboard-key:first-child {
   text-align: right;
 }
-.keyboard-key.float-key-last {
+.keyboard-key:last-child {
   text-align: left;
 }
 
@@ -638,13 +652,6 @@ bubble above the key when you tap and hold. */
     height: 7rem;
     line-height: 7rem;
     font-size: 3.5rem
-}
-
-.suggestions-container {
-  display: none;
-}
-.dismiss-suggestions-button {
-  visibility: hidden;
 }
 
 /*
@@ -672,10 +679,11 @@ bubble above the key when you tap and hold. */
 }
 
 .keyboard-candidate-panel.latin > .suggestions-container {
-  display: block;
+  display: flex;
   width: calc(100% - 3.6rem);
   float: left;
 }
+
 .keyboard-candidate-panel.latin > .suggestions-container > div {
   text-align: center;
   display: inline-block;
@@ -685,17 +693,9 @@ bubble above the key when you tap and hold. */
   border: 0;
   overflow: hidden;
   -moz-box-sizing: border-box;
+  flex: 1;
 }
 
-.keyboard-candidate-panel.latin > .suggestions-container.has1 > div {
-  width: calc(100% - 0.6rem);
-}
-.keyboard-candidate-panel.latin > .suggestions-container.has2 > div {
-  width: calc(50% - 0.6rem);
-}
-.keyboard-candidate-panel.latin > .suggestions-container.has3 > div {
-  width: calc(33% - 0.6rem);
-}
 
 /* Indicator for keyboard hiding action */
 .keyboard-key[data-keycode="32"] {
@@ -916,6 +916,162 @@ bubble above the key when you tap and hold. */
   .keyboard-key.tamil > .visual-wrapper > span[data-label="ௌ"] {
     font-size: 1.1rem;
   }
+}
+
+.emoji {
+  font-family: sans-serif;
+  border: none;
+  background: none;
+  font-size: 3rem;
+  min-height: 5rem;
+  min-width: 5rem;
+  padding: 0;
+  flex: 1;
+}
+
+.emoji.highlighted {
+  background-color: #4a5255;
+}
+
+.swipe-panel {
+  position: relative;
+  height: 16.2rem;
+}
+
+.swipe-section {
+  position: absolute;
+  width: 100%;
+  transform: translateX(99.99%);
+  will-change: transform;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.swipe-section:first-child {
+  transform: translateX(0);
+}
+
+.emoji-ime-switch {
+  background: url('images/emoji/keyboard_ic_ime_emoji_off.png') center center / 3rem no-repeat,
+              url('images/icon_alternate_keyboard.png') left 50% bottom 0.4rem / 1.4rem no-repeat;
+}
+
+.emoji-ime-switch.highlighted {
+  background-image: url('images/emoji/keyboard_ic_ime_emoji_pressed.png');
+}
+
+/* styles for the switching keys of different emoji categories */
+.swipe-switching-buttons {
+  background-color: #525a5d;
+}
+
+.swipe-switching-buttons > .active {
+  background-color: #606b6e;
+  border-bottom: 0.2rem solid #00aacb;
+}
+
+.swipe-switching-buttons > .keyboard-key > .visual-wrapper > .key-element {
+  border-right: 0.1rem solid transparent;
+}
+
+.emoji-recent {
+  background: #576367 url('images/emoji/keyboard_ic_recent_off.png') center center / 3rem no-repeat;
+}
+
+.keyboard-key.emoji-recent > .visual-wrapper > .key-element {
+  border-right: 0.1rem solid transparent;
+  border-left: 0.1rem solid #525a5d;
+}
+
+.emoji-recent.highlighted {
+  background-image: url('images/emoji/keyboard_ic_recent_pressed.png');
+}
+
+.emoji-people {
+  background: #576367 url('images/emoji/keyboard_ic_ppl_off.png') center center / 3rem no-repeat;
+}
+
+.emoji-people.active {
+  background-image: url('images/emoji/keyboard_ic_ppl_on.png');
+}
+
+.emoji-people.highlighted {
+  background-image: url('images/emoji/keyboard_ic_ppl_pressed.png');
+}
+
+.emoji-nature {
+  background: #576367 url('images/emoji/keyboard_ic_nature_off.png') center center / 3rem no-repeat;
+}
+
+.emoji-nature.active {
+  background-image: url('images/emoji/keyboard_ic_nature_on.png');
+}
+
+.emoji-nature.highlighted {
+  background-image: url('images/emoji/keyboard_ic_nature_pressed.png');
+}
+
+.emoji-object {
+  background: #576367 url('images/emoji/keyboard_ic_object_off.png') center center / 3rem no-repeat;
+}
+
+.emoji-object.active {
+  background-image: url('images/emoji/keyboard_ic_object_on.png');
+}
+
+.emoji-object.highlighted {
+  background-image: url('images/emoji/keyboard_ic_object_pressed.png');
+}
+
+.emoji-place {
+  background: #576367 url('images/emoji/keyboard_ic_place_off.png') center center / 3rem no-repeat;
+}
+
+.emoji-place.active {
+  background-image: url('images/emoji/keyboard_ic_place_on.png');
+}
+
+.emoji-place.highlighted {
+  background-image: url('images/emoji/keyboard_ic_place_pressed.png');
+}
+
+.emoji-symbol {
+  background: #576367 url('images/emoji/keyboard_ic_symbol_off.png') center center / 3rem no-repeat;
+}
+
+.emoji-symbol.active {
+  background-image: url('images/emoji/keyboard_ic_symbol_on.png');
+}
+
+.emoji-symbol.highlighted {
+  background-image: url('images/emoji/keyboard_ic_symbol_pressed.png');
+}
+
+.keyboard-key.emoji-symbol > .visual-wrapper > .key-element {
+  border-right: 0.1rem solid #525a5d ;
+  border-left: 0.1rem solid transparent;
+}
+
+/* Section indicator for emoji sections */
+.section-indicator-container {
+  bottom: 0;
+  position: absolute;
+  width: 100%;
+  height: 1.7rem;
+  text-align: center;
+}
+
+.section-indicator {
+  display: inline-block;
+  background-color: #545d60;
+  width: 0.3rem;
+  height: 0.3rem;
+  border-radius: 50%;
+  margin: 0.7rem 0.3rem 0.7rem 0;
+}
+
+.section-indicator.active {
+  background-color: #3e4446;
 }
 
 @media (orientation:landscape) {

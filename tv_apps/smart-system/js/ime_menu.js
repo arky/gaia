@@ -1,6 +1,6 @@
 'use strict';
 
-/* global Template, LazyLoader, MozActivity */
+/* global Template, LazyLoader, MozActivity, focusManager */
 (function(exports) {
   /**
    * ImeMenu displays a list of currently enabled IMEs in an overlay.
@@ -14,7 +14,7 @@
     this.onselected = successCb || function() {};
     this.oncancel = cancelCb || function() {};
     this.listItems = listItems;
-    this.title = title;
+    this.titleL10nId = title;
   }
 
   ImeMenu.prototype = {
@@ -24,6 +24,7 @@
      */
     start: function() {
       LazyLoader.load('shared/js/template.js', this.initUI.bind(this));
+      focusManager.focus();
     },
 
     /**
@@ -35,8 +36,8 @@
       var _ = navigator.mozL10n ? navigator.mozL10n.get : function(){};
 
       dummy.innerHTML = Template('ime-menu-template').interpolate({
-        title: this.title,
-        cancelLabel: _('cancel'),
+        title: this.titleL10nId,
+        cancelLabel: 'cancel',
         settingsLabel: _('ime-settings')
       });
       this.container = dummy.firstElementChild;
@@ -59,6 +60,7 @@
       this.container.addEventListener('mousedown', this.preventFocusChange);
 
       window.dispatchEvent(new CustomEvent('imemenushow'));
+      focusManager.addUI(this);
     },
 
     /**
@@ -74,6 +76,7 @@
       window.removeEventListener('holdhome', this);
 
       this.container.removeEventListener('mousedown', this.preventFocusChange);
+      focusManager.removeUI(this);
     },
 
     /**
@@ -101,6 +104,7 @@
      */
     hide: function(callback) {
       this.stop();
+      focusManager.focus();
       if (callback && typeof callback === 'function') {
         setTimeout(callback);
       }
@@ -187,7 +191,22 @@
       activity.onerror = function() {
         console.error('Failed to invoke keyboard settings.');
       };
-    }
+    },
+
+    isFocusable: function() {
+      return !!this.container.parentElement;
+    },
+
+    getElement: function() {
+      return this.container;
+    },
+
+    focus: function() {
+      if (this.isFocusable()) {
+        document.activeElement.blur();
+        this.container.querySelector('.ime-menu-button').focus();
+      }
+    },
   };
 
   exports.ImeMenu = ImeMenu;

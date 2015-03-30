@@ -1,3 +1,5 @@
+/* globals CallLogDBManager, MockContacts, MocksHelper, Utils */
+
 'use strict';
 
 requireApp('communications/dialer/js/call_log_db.js');
@@ -6,10 +8,6 @@ require('/shared/js/dialer/utils.js');
 require('/shared/test/unit/mocks/dialer/mock_contacts.js');
 require('/shared/test/unit/mocks/mock_contact_photo_helper.js');
 require('/shared/test/unit/mocks/mock_lazy_loader.js');
-
-if (!this.Contacts) {
-  this.Contacts = null;
-}
 
 var mocksHelperForCallLogDB = new MocksHelper([
   'LazyLoader',
@@ -1200,6 +1198,10 @@ suite('dialer/call_log_db', function() {
       duration: duration
     };
 
+    var contact = {
+      id: 'test'
+    };
+
     teardown(function(done) {
       CallLogDBManager.deleteAll(function() {
         done();
@@ -1223,6 +1225,32 @@ suite('dialer/call_log_db', function() {
           done();
         });
         CallLogDBManager.add(call2);
+      });
+    });
+
+    test('when updating contact information', function(done) {
+      CallLogDBManager.add(call, function() {
+        window.addEventListener('CallLogDbNewCall', function checkEvt(evt) {
+          window.removeEventListener('CallLogDbNewCall', checkEvt);
+          assert.equal(evt.detail.group.contact.id, contact.id);
+          assert.equal(evt.detail.group.contact.primaryInfo, numbers[0]);
+          done();
+        });
+        CallLogDBManager.updateGroupContactInfo(contact, { value: numbers[0] });
+      });
+    });
+
+    test('when removing contact information', function(done) {
+      CallLogDBManager.add(call, function() {
+        CallLogDBManager.updateGroupContactInfo(contact, { value: numbers[0] },
+        function() {
+          window.addEventListener('CallLogDbNewCall', function checkEvt(evt) {
+            window.removeEventListener('CallLogDbNewCall', checkEvt);
+            assert.isUndefined(evt.detail.group.contact);
+            done();
+          });
+        });
+        CallLogDBManager.removeGroupContactInfo(contact.id, null);
       });
     });
   });

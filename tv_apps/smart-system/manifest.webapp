@@ -18,7 +18,6 @@
     "device-storage:sdcard":{ "access": "readwrite" },
     "device-storage:pictures":{ "access": "readwrite" },
     "settings":{ "access": "readwrite" },
-    "storage":{},
     "geolocation":{},
     "audio-capture": {},
     "video-capture": {},
@@ -60,6 +59,7 @@
     "189": "/style/icons/system_189.png",
     "284": "/style/icons/system_284.png"
   },
+  "orientation": "landscape",
   "activities": {
     "view": {
       "filters": {
@@ -96,6 +96,18 @@
     },
     "screenshot": {
       "description": "allow certified applications take screenshot",
+      "rules": {
+        "minimumAccessLevel": "certified"
+      }
+    },
+    "interactivenotifications": {
+      "description": "allow certified applications to show notifications.",
+      "rules": {
+        "minimumAccessLevel": "certified"
+      }
+    },
+    "customlaunchpath": {
+      "description": "communicate with smart-home to launch arbitrary path.",
       "rules": {
         "minimumAccessLevel": "certified"
       }

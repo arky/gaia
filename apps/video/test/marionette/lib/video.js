@@ -27,10 +27,9 @@ Video.Selector = Object.freeze({
   thumbnailsSingleDeleteButton: 'a.button.single-delete-button',
   thumbnailsSingleShareButton: 'a.button.single-share-button',
   player: 'video#player',
-  videoControls: '#videoControls',
   overlay: '#overlay',
   thumbnailsSelectButton: '#thumbnails-select-button',
-  thumbnailSelectView: '#thumbnail-select-view',
+  thumbnailSelectTop: '#thumbnail-select-top',
   thumbnailsShareButton: '#thumbnails-share-button',
   thumbnailsVideoButton: '#thumbnails-video-button',
   thumbnailsDeleteButton: '#thumbnails-delete-button',
@@ -64,13 +63,6 @@ Video.prototype = {
    */
   get overlay() {
     return this.client.findElement(Video.Selector.overlay);
-  },
-
-  /**
-   * @return {Marionette.Element} that displays video controls.
-   */
-  get videoControls() {
-    return this.client.findElement(Video.Selector.videoControls);
   },
 
   /**
@@ -159,7 +151,7 @@ Video.prototype = {
   enterSelectionMode: function() {
     this.client.helper.waitForElement(Video.Selector.thumbnailsSelectButton)
       .click();
-    this.client.helper.waitForElement(Video.Selector.thumbnailSelectView);
+    this.client.helper.waitForElement(Video.Selector.thumbnailSelectTop);
   },
 
   /**

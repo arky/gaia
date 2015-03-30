@@ -27,7 +27,8 @@ var ConferenceGroupUI = (function() {
   var groupCalls = document.getElementById('group-call-details'),
       groupCallsList,
       groupCallsHeader,
-      initialized = false;
+      initialized = false,
+      bdiGroupCallsCountElt;
 
   document.getElementById('group-show').addEventListener(
     'click', showGroupDetails);
@@ -46,6 +47,11 @@ var ConferenceGroupUI = (function() {
       groupCallsList = document.getElementById('group-call-details-list');
       document.getElementById('group-hide').addEventListener(
         'click', _hideGroupDetails);
+
+      if (!initialized) {
+        bdiGroupCallsCountElt = document.createElement('bdi');
+        groupCallsHeader.appendChild(bdiGroupCallsCountElt);
+      }
       initialized = true;
       callback();
     });
@@ -93,7 +99,9 @@ var ConferenceGroupUI = (function() {
    *  overlay.
    */
   function removeCall(node) {
-    node.parentNode.removeChild(node);
+    if (node.parentNode) {
+      node.parentNode.removeChild(node);
+    }
   }
 
   /**
@@ -148,7 +156,7 @@ var ConferenceGroupUI = (function() {
    */
   function setGroupDetailsHeader(text) {
     _init(function() {
-      groupCallsHeader.textContent = text;
+      bdiGroupCallsCountElt.textContent = text;
     });
   }
 

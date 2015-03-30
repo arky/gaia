@@ -14,10 +14,6 @@ marionette('week view', function() {
       // Do not require the B2G-desktop app window to have focus (as per the
       // system window manager) in order for it to do focus-related things.
       'focusmanager.testmode': true,
-    },
-    settings: {
-      'ftu.manifestURL': null,
-      'lockscreen.enabled': false
     }
   });
 
@@ -370,6 +366,25 @@ marionette('week view', function() {
     client.waitFor(function() {
       return app.week.events.length === 0;
     }, { timeout: 2000 });
+  });
+
+  test('scroll to event', function() {
+    week.waitForHourScrollEnd();
+    week.scrollToTop();
+
+    var startDate = new Date();
+    startDate.setHours(13, 0, 0, 0);
+
+    app.createEvent({
+      title: 'Test Week View',
+      location: 'Somewhere',
+      startDate: startDate
+    });
+
+    week.waitForDisplay();
+
+    // scroll to 1h before event
+    week.waitForHourScrollEnd(12);
   });
 
   function pad(n) {

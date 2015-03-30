@@ -1,7 +1,5 @@
 'use strict';
 
-var Actions = require('marionette-client').Actions;
-
 marionette('Closing statusbar via home button >', function() {
 
   var assert = require('assert');
@@ -10,18 +8,15 @@ marionette('Closing statusbar via home button >', function() {
     prefs: {
       'dom.w3c_touch_events.enabled': 1,
       'devtools.debugger.forbid-certified-apps': false
-    },
-    settings: {
-      'ftu.manifestURL': null,
-      'lockscreen.enabled': false
     }
   });
 
   var system,
       verticalHomeApp = 'app://verticalhome.gaiamobile.org',
-      actions = new Actions(client);
+      actions;
 
   setup(function() {
+    actions = client.loader.getActions();
     system = client.loader.getAppClass('system');
     client.switchToFrame();
     system.waitForStartup();

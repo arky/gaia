@@ -1,10 +1,9 @@
-/* global InputWindowManager, inputWindowManager */
+/* global InputWindowManager, inputWindowManager, Service */
 
 'use strict';
 
 requireApp('system/test/unit/mock_app.js');
 requireApp('system/test/unit/mock_chrome_event.js');
-requireApp('system/test/unit/mock_statusbar.js');
 requireApp('system/test/unit/mock_system_banner.js');
 requireApp('system/test/unit/mock_notification_screen.js');
 requireApp('system/test/unit/mock_applications.js');
@@ -13,6 +12,7 @@ requireApp('system/test/unit/mock_modal_dialog.js');
 require('/shared/test/unit/mocks/mock_l10n.js');
 requireApp('system/test/unit/mock_ftu_launcher.js');
 require('/js/input_window_manager.js');
+require('/js/service.js');
 
 require('/shared/js/template.js');
 require('/shared/test/unit/mocks/mock_lazy_loader.js');
@@ -24,7 +24,6 @@ require('/shared/test/unit/mocks/mock_keyboard_helper.js');
 requireApp('system/js/app_install_manager.js');
 
 var mocksForAppInstallManager = new MocksHelper([
-  'StatusBar',
   'SystemBanner',
   'NotificationScreen',
   'Applications',
@@ -99,6 +98,7 @@ suite('system/AppInstallManager >', function() {
   });
 
   setup(function() {
+    this.sinon.stub(Service, 'request');
     fakeDialog = document.createElement('form');
     fakeDialog.id = 'app-install-dialog';
     fakeDialog.innerHTML = [
@@ -240,6 +240,13 @@ suite('system/AppInstallManager >', function() {
 
     MockNavigatorWakeLock.mTeardown();
   });
+
+  function waitForEvent(evtName, done) {
+    window.addEventListener(evtName, function wait() {
+      window.removeEventListener(evtName, wait);
+      done();
+    });
+  }
 
   suite('init >', function() {
     test('should bind dom elements', function() {
@@ -654,7 +661,7 @@ suite('system/AppInstallManager >', function() {
       });
 
       test('should not show the icon', function() {
-        assert.isUndefined(MockStatusBar.wasMethodCalled['incSystemDownloads']);
+        assert.isFalse(Service.request.calledWith('incDownloads'));
       });
 
       test('should not add a notification', function() {
@@ -671,8 +678,8 @@ suite('system/AppInstallManager >', function() {
     function beforeFirstProgressSuite() {
       suite('before first progress >', function() {
         test('should not show the icon', function() {
-          var method = 'incSystemDownloads';
-          assert.isUndefined(MockStatusBar.wasMethodCalled[method]);
+          var method = 'incDownloads';
+          assert.isFalse(Service.request.calledWith(method));
         });
 
         test('should not add a notification', function() {
@@ -683,8 +690,8 @@ suite('system/AppInstallManager >', function() {
           setup(function() {
             // reseting these mocks as we want to test only one call
             MockNotificationScreen.mTeardown();
-            MockStatusBar.mTeardown();
-
+            Service.request.restore();
+            this.sinon.stub(Service, 'request');
             mockApp.mTriggerDownloadSuccess();
           });
 
@@ -694,8 +701,8 @@ suite('system/AppInstallManager >', function() {
           });
 
           test('should not remove the download icon', function() {
-            var method = 'decSystemDownloads';
-            assert.isUndefined(MockStatusBar.wasMethodCalled[method]);
+            var method = 'decDownloads';
+            assert.isFalse(Service.request.calledWith(method));
           });
 
           test('should display a confirmation', function() {
@@ -709,8 +716,8 @@ suite('system/AppInstallManager >', function() {
           setup(function() {
             // reseting these mocks as we want to test only one call
             MockNotificationScreen.mTeardown();
-            MockStatusBar.mTeardown();
-
+            Service.request.restore();
+            this.sinon.stub(Service, 'request');
             mockApp.mTriggerDownloadError();
           });
 
@@ -720,8 +727,8 @@ suite('system/AppInstallManager >', function() {
           });
 
           test('should not remove the download icon', function() {
-            var method = 'decSystemDownloads';
-            assert.isUndefined(MockStatusBar.wasMethodCalled[method]);
+            var method = 'decDownloads';
+            assert.isFalse(Service.request.calledWith(method));
           });
         });
       });
@@ -732,7 +739,9 @@ suite('system/AppInstallManager >', function() {
         setup(function() {
           // reseting these mocks as we only want to test the
           // following call
-          MockStatusBar.mTeardown();
+
+          Service.request.restore();
+          this.sinon.stub(Service, 'request');
           MockSystemBanner.mTeardown();
           MockModalDialog.mTeardown();
         });
@@ -785,8 +794,8 @@ suite('system/AppInstallManager >', function() {
           });
 
           test('should remove the icon', function() {
-            var method = 'decSystemDownloads';
-            assert.ok(MockStatusBar.wasMethodCalled[method]);
+            var method = 'decDownloads';
+            assert.isTrue(Service.request.calledWith(method));
           });
 
           beforeFirstProgressSuite();
@@ -826,8 +835,8 @@ suite('system/AppInstallManager >', function() {
             // reseting these mocks as we want to test only the following
             // calls
             MockNotificationScreen.mTeardown();
-            MockStatusBar.mTeardown();
-
+            Service.request.restore();
+            this.sinon.stub(Service, 'request');
             mockApp.mTriggerDownloadProgress(NaN);
           });
 
@@ -1226,6 +1235,27 @@ suite('system/AppInstallManager >', function() {
       });
     });
 
+    suite('langpack >', function() {
+      setup(function() {
+        mockAppName = 'Fake langpack';
+        mockApp = new MockApp({
+          manifest: {
+            name: mockAppName,
+            role: 'langpack'
+          },
+          updateManifest: null,
+          installState: 'installed'
+        });
+        MockSystemBanner.mTeardown();
+        dispatchInstallEvent();
+      });
+
+      test('should display the special text for langpacks', function() {
+        assert.equal(MockSystemBanner.mMessage,
+        'langpack-install-success2{"appName":"' + mockAppName + '"}');
+      });
+    });
+
     suite('cancelling a download >', function() {
       setup(function() {
         mockApp = new MockApp({ installState: 'pending' });
@@ -1234,7 +1264,10 @@ suite('system/AppInstallManager >', function() {
         mockApp.mTriggerDownloadProgress(10);
       });
 
-      test('tapping the notification should display the dialog', function() {
+      test('tapping the notification should display the dialog',
+      function(done) {
+        waitForEvent('installpromptshown', done);
+
         fakeNotif.querySelector('.fake-notification').click();
         assert.isTrue(fakeDownloadCancelDialog.classList.contains('visible'));
       });
@@ -1265,7 +1298,9 @@ suite('system/AppInstallManager >', function() {
         assert.isFalse(MockUtilityTray.mShown);
       });
 
-      test('cancelling should hide the dialog only', function() {
+      test('cancelling should hide the dialog only', function(done) {
+        waitForEvent('installprompthidden', done);
+
         fakeNotif.querySelector('.fake-notification').click();
         fakeDownloadCancelDialog.querySelector('.cancel').click();
         assert.isFalse(fakeDownloadCancelDialog.classList.contains('visible'));
@@ -1273,7 +1308,9 @@ suite('system/AppInstallManager >', function() {
       });
 
       test('accepting should hide the dialog and call cancelDownload on app',
-      function() {
+      function(done) {
+        waitForEvent('installprompthidden', done);
+
         fakeNotif.querySelector('.fake-notification').click();
         fakeDownloadCancelDialog.querySelector('.confirm').click();
         assert.isFalse(fakeDownloadCancelDialog.classList.contains('visible'));
@@ -1437,7 +1474,9 @@ suite('system/AppInstallManager >', function() {
       assert.isTrue(navigator.mozApps.mgmt.uninstall.calledOnce);
     });
 
-    test('should show setup dialog', function() {
+    test('should show setup dialog', function(done) {
+      waitForEvent('installpromptshown', done);
+
       AppInstallManager.handleInstallSuccess(mockApp);
       assert.isTrue(AppInstallManager.
                       setupInstalledAppDialog.classList.contains('visible'));
@@ -1452,7 +1491,9 @@ suite('system/AppInstallManager >', function() {
       assert.equal(AppInstallManager.setupAppDescription.textContent, '');
     });
 
-    test('should not show setup dialog and wait in setupQueue', function() {
+    test('should not show setup dialog and wait in setupQueue', function(done) {
+      waitForEvent('installpromptshown', done);
+
       this.sinon.spy(AppInstallManager, 'showSetupDialog');
       AppInstallManager.handleInstallSuccess(mockApp);
       assert.isTrue(AppInstallManager.
@@ -1481,7 +1522,9 @@ suite('system/AppInstallManager >', function() {
       assert.deepEqual(l10nAttrs.args, {appName: mockAppTwoName});
     });
 
-    test('should show ime list', function() {
+    test('should show ime list', function(done) {
+      waitForEvent('installpromptshown', done);
+
       this.sinon.spy(Template.prototype, 'interpolate');
       AppInstallManager.handleInstallSuccess(mockAppTwo);
       AppInstallManager.setupConfirmButton.click();
@@ -1589,7 +1632,10 @@ suite('system/AppInstallManager >', function() {
       sinon.assert.calledOnce(KeyboardHelper.saveToSettings);
     });
 
-    test('IME setup dialog should be hidden after pressing home', function() {
+    test('IME setup dialog should be hidden after pressing home',
+    function(done) {
+      waitForEvent('installprompthidden', done);
+
       AppInstallManager.handleInstallSuccess(mockApp);
       assert.isTrue(AppInstallManager.
                       setupInstalledAppDialog.classList.contains('visible'));
@@ -1599,7 +1645,9 @@ suite('system/AppInstallManager >', function() {
                       setupInstalledAppDialog.classList.contains('visible'));
     });
 
-    test('IME list should be hidden after pressing home', function() {
+    test('IME list should be hidden after pressing home', function(done) {
+      waitForEvent('installprompthidden', done);
+
       AppInstallManager.handleInstallSuccess(mockAppTwo);
       AppInstallManager.setupConfirmButton.click();
       assert.isTrue(AppInstallManager.

@@ -27,7 +27,7 @@
 form[role="dialog"][data-type="action"] > menu > button.icon,
 form[role="dialog"][data-type="object"] > menu > button.icon {
   background-repeat: no-repeat;
-  padding-left: 4rem;
+  -moz-padding-start: 4rem;
   background-size: 3rem;
   background-position: 0.5rem center;
 }
@@ -48,6 +48,7 @@ form[role="dialog"][data-type="object"] {
   visibility: hidden;
   transform: translateY(100%);
   transition: transform ease-in-out .3s, visibility .3s;
+  pointer-events: none;
 }
 
 form[role="dialog"][data-type="action"].visible,
@@ -55,6 +56,30 @@ form[role="dialog"][data-type="object"].visible {
   position: fixed;
   visibility: visible;
   transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Extending action menu to display checkbox */
+form[role="dialog"][data-type="action"] > menu > .pack-checkbox {
+  margin: -1rem 0 0 1.5rem;
+  padding: 0 1.2rem;
+  width: auto;
+}
+
+form[role="dialog"][data-type="action"] > menu > .pack-checkbox span {
+  font-size: 1.6rem;
+  font-weight: 300;
+  font-style: italic;
+  vertical-align: middle;
+  padding-top: 5rem;
+  padding-left: 3rem;
+  pointer-events: none;
+
+}
+
+form[role="dialog"][data-type="action"] > menu > .pack-checkbox span:after {
+  left: 0;
+  margin-left: 0.9rem;
 }
 
 @media (min-width: 768px) {
@@ -135,4 +160,10 @@ form[role="dialog"][data-type="object"].visible {
     bottom: calc(50% - 14rem);
     z-index: -1;
   }
+}
+
+/* RTL View */
+html[dir="rtl"] form[role="dialog"][data-type="action"] > menu > button.icon,
+html[dir="rtl"] form[role="dialog"][data-type="object"] > menu > button.icon {
+  background-position: right 0.5rem center;
 }

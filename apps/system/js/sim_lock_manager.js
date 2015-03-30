@@ -10,16 +10,15 @@
     'ftuopen',
     'appopened',
     'lockscreen-request-unlock',
+    'simslot-updated',
     'simslot-cardstatechange',
     'simslot-iccinfochange',
     'attentionopening',
     'attentionterminated',
     'simlockskip',
     'simlockback',
-    'simlockrequestclose'
-  ];
-  SimLockManager.STATES = [
-    'isActive'
+    'simlockrequestclose',
+    'airplanemode-enabled'
   ];
   SimLockManager.SUB_MODULES = [
     'SimLockSystemDialog'
@@ -29,9 +28,6 @@
     _duringCall: false,
     _showPrevented: false,
     _alreadyShown: false,
-    isActive: function() {
-      return this._alreadyShown;
-    },
 
     _handle_simslotready: function() {
       this.showIfLocked();
@@ -39,6 +35,10 @@
 
     _sim_lock_system_dialog_loaded: function() {
       this.showIfLocked();
+    },
+
+    '_handle_simslot-updated': function(evt) {
+      this.showIfLocked(evt.detail.index);
     },
 
     '_handle_simslot-iccinfochange': function(evt) {
@@ -147,6 +147,9 @@
       var settingsManifestURL =
         'app://settings.gaiamobile.org/manifest.webapp';
       if (app.manifestURL == settingsManifestURL) {
+        if (this.simLockSystemDialog.visible) {
+          this.simLockSystemDialog.close();
+        }
         return;
       }
 
@@ -157,6 +160,28 @@
       // but only put the SIM PIN dialog upon the opening/opened app.
       // Will revisit this in
       // https://bugzilla.mozilla.org/show_bug.cgi?id=SIMPIN-Dialog
+    },
+
+    '_handle_airplanemode-enabled': function(evt) {
+      this.simLockSystemDialog.close();
+      this._alreadyShown = false;
+    },
+
+    isBothSlotsLocked: function sl_isBothSlotsLocked() {
+      if (!SIMSlotManager.isMultiSIM() ||
+          SIMSlotManager.hasOnlyOneSIMCardDetected()) {
+        return false;
+      }
+
+      var simSlots = SIMSlotManager.getSlots();
+      var isBothLocked = true;
+      for (var i = 0; i < simSlots.length; i++) {
+        var currentSlot = simSlots[i];
+        var unknownState = currentSlot.isUnknownState();
+        var currentLocked = currentSlot.isLocked() || unknownState;
+        isBothLocked = isBothLocked && currentLocked;
+      }
+      return isBothLocked;
     },
 
     showIfLocked: function sl_showIfLocked(currentSlotIndex, skipped) {
@@ -216,11 +241,11 @@
         }
 
         // Always showing the first slot first.
-        if (!this._alreadyShown && index > 0) {
+        if (!this._alreadyShown && this.isBothSlotsLocked() && index > 0) {
           return false;
         }
 
-        switch (slot.simCard.cardState) {
+        switch (slot.getCardState()) {
           // do nothing in either unknown or null card states
           case null:
           case 'unknown':

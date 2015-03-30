@@ -71,6 +71,23 @@ var Common = {
     'app://search.gaiamobile.org/manifest.webapp'
   ],
 
+  SYSTEM_MANIFEST: 'app://system.gaiamobile.org/manifest.webapp',
+
+  BROWSER_APP: {
+    manifestURL: 'app://browser.gaiamobile.org/manifest.webapp',
+    origin: '',
+    manifest: {
+      icons: {
+        '84': '/shared/resources/branding/browser_84.png',
+        '126': '/shared/resources/branding/browser_126.png',
+        '142': '/shared/resources/branding/browser_142.png',
+        '189': '/shared/resources/branding/browser_189.png',
+        '284': '/shared/resources/branding/browser_284.png'
+      },
+      name: 'browser'
+    }
+  },
+
   startFTE: function(mode) {
     var iframe = document.getElementById('fte_view');
 
@@ -87,23 +104,28 @@ var Common = {
         // PERFORMANCE EVENTS
         // Designates that the app's *core* chrome or navigation interface
         // exists in the DOM and is marked as ready to be displayed.
+        window.performance.mark('navigationLoaded');
         window.dispatchEvent(new CustomEvent('moz-chrome-dom-loaded'));
 
         // Designates that the app's *core* chrome or navigation interface
         // has its events bound and is ready for user interaction.
+        window.performance.mark('navigationInteractive');
         window.dispatchEvent(new CustomEvent('moz-chrome-interactive'));
 
         // Designates that the app is visually loaded (e.g.: all of the
         // "above-the-fold" content exists in the DOM and is marked as
         // ready to be displayed).
+        window.performance.mark('visuallyLoaded');
         window.dispatchEvent(new CustomEvent('moz-app-visually-complete'));
 
         // Designates that the app has its events bound for the minimum
         // set of functionality to allow the user to interact with the
         // "above-the-fold" content.
+        window.performance.mark('contentInteractive');
         window.dispatchEvent(new CustomEvent('moz-content-interactive'));
 
         // Start up ended when FTE ready
+        window.performance.mark('fullyLoaded');
         window.dispatchEvent(new CustomEvent('moz-app-loaded'));
       }
     });
@@ -197,6 +219,7 @@ var Common = {
         Common.allApps = appList.filter(function(app) {
           return Common.specialApps.indexOf(app.manifestURL) === -1;
         });
+        Common.allApps.push(Common.BROWSER_APP);
         Common.allAppsLoaded = true;
         resolve(Common.allApps);
       };
@@ -237,6 +260,14 @@ var Common = {
   },
 
   getLocalizedAppName: function(app) {
+    // If is System App returns label others
+    if (app.manifestURL === Common.SYSTEM_MANIFEST) {
+      return _('data-usage-other-apps');
+    }
+    // Browser app does not exist, we have to provide the localized app name
+    if (app.manifestURL === Common.BROWSER_APP.manifestURL) {
+      return _('data-usage-browser-app');
+    }
     var manifest = this.getAppManifest(app);
     var userLang = document.documentElement.lang;
     var locales = manifest.locales;

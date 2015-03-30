@@ -40,26 +40,34 @@ System.Selector = Object.freeze({
   appChromeWindowsButton: '.appWindow.active .controls .windows-button',
   appChromeProgressBar: '.appWindow.active .chrome gaia-progress',
   browserWindow: '.appWindow.browser',
+  currentWindow: '.appWindow.active',
   dialogOverlay: '#screen #dialog-overlay',
   downloadDialog: '#downloadConfirmUI',
   imeMenu: '.ime-menu',
+  inlineActivity: '.appWindow.inline-activity',
   sleepMenuContainer: '#sleep-menu-container',
   softwareButtons: '#software-buttons',
   softwareHome: '#software-home-button',
   softwareHomeFullscreen: '#fullscreen-software-home-button',
   softwareHomeFullscreenLayout: '#software-buttons-fullscreen-layout',
   statusbar: '#statusbar',
+  statusbarShadow: '.appWindow.active .statusbar-shadow',
+  statusbarShadowTray: '#statusbar-tray',
+  statusbarShadowActivity: '.activityWindow.active .statusbar-shadow',
   statusbarMaximizedWrapper: '#statusbar-maximized-wrapper',
   statusbarMinimizedWrapper: '#statusbar-minimized-wrapper',
-  statusbarLabel: '#statusbar-label',
+  statusbarOperator: '.statusbar-operator',
   systemBanner: '.banner.generic-dialog',
   topPanel: '#top-panel',
+  trustedWindow: '.appWindow.active.trustedwindow',
+  trustedWindowChrome: '.appWindow.active.trustedwindow .chrome',
   leftPanel: '#left-panel',
   rightPanel: '#right-panel',
   utilityTray: '#utility-tray',
   visibleForm: '#screen > form.visible',
   cancelActivity: 'form.visible button[data-action="cancel"]',
-  nfcIcon: '#statusbar-nfc'
+  nfcIcon: '.statusbar-nfc',
+  activeKeyboard: '.inputWindow.active'
 });
 
 System.prototype = {
@@ -175,6 +183,10 @@ System.prototype = {
       System.Selector.appChromeProgressBar);
   },
 
+  get currentWindow() {
+    return this.client.helper.waitForElement(System.Selector.currentWindow);
+  },
+
   get dialogOverlay() {
     return this.client.helper.waitForElement(
       System.Selector.dialogOverlay);
@@ -186,6 +198,10 @@ System.prototype = {
 
   get imeMenu() {
     return this.client.helper.waitForElement(System.Selector.imeMenu);
+  },
+
+  get inlineActivity() {
+    return this.client.helper.waitForElement(System.Selector.inlineActivity);
   },
 
   get sleepMenuContainer() {
@@ -222,12 +238,22 @@ System.prototype = {
     return this.client.findElement(System.Selector.statusbarMinimizedWrapper);
   },
 
-  get statusbarLabel() {
-    return this.client.findElement(System.Selector.statusbarLabel);
+  get statusbarOperator() {
+    return this.client.findElement(System.Selector.statusbarOperator);
   },
 
   get systemBanner() {
     return this.client.helper.waitForElement(System.Selector.systemBanner);
+  },
+
+  get trustedWindow() {
+    return this.client.helper.waitForElement(
+      System.Selector.trustedWindow);
+  },
+
+  get trustedWindowChrome() {
+    return this.client.helper.waitForElement(
+      System.Selector.trustedWindowChrome);
   },
 
   get utilityTray() {
@@ -260,6 +286,18 @@ System.prototype = {
 
   get nfcIcon() {
     return this.client.findElement(System.Selector.nfcIcon);
+  },
+
+  get statusbarShadow() {
+    return this.client.findElement(System.Selector.statusbarShadow);
+  },
+
+  get statusbarShadowTray() {
+    return this.client.findElement(System.Selector.statusbarShadowTray);
+  },
+
+  get statusbarShadowActivity() {
+    return this.client.findElement(System.Selector.statusbarShadowActivity);
   },
 
   getAppIframe: function(url) {
@@ -317,6 +355,10 @@ System.prototype = {
     }, [iframe]);
   },
 
+  waitForKeyboard: function() {
+    this.client.helper.waitForElement(System.Selector.activeKeyboard);
+  },
+
   goHome: function() {
     this.client.switchToFrame();
     this.client.executeAsyncScript(function() {
@@ -350,13 +392,18 @@ System.prototype = {
     });
   },
 
+  request: function(service) {
+    this.client.executeScript(function(service) {
+      window.wrappedJSObject.Service.request(service);
+    }, [service]);
+  },
+
+
   stopClock: function() {
     var client = this.client;
-    var clock = client.executeScript(function() {
-      return window.wrappedJSObject.StatusBar.icons.time;
-    });
+    var clock = this.client.findElement('#statusbar-time');
     client.executeScript(function() {
-      window.wrappedJSObject.StatusBar.toggleTimeLabel(false);
+      window.wrappedJSObject.Service.request('TimeIcon:stop');
     });
     client.waitFor(function() {
       return !clock.displayed();
@@ -372,6 +419,18 @@ System.prototype = {
   stopDevtools: function() {
     this.client.executeScript(function() {
       window.wrappedJSObject.developerHUD.stop();
+    });
+  },
+
+  // The activity menu has a transform transition where it appears from the
+  // bottom of the screen. This waits for that to complete.
+  waitForActivityMenu: function() {
+    var form = this.client.helper.waitForElement(System.Selector.visibleForm);
+    this.client.waitFor(function() {
+      return form.scriptWith(function(element) {
+        return window.getComputedStyle(element).transform ===
+          'matrix(1, 0, 0, 1, 0, 0)';
+      });
     });
   },
 

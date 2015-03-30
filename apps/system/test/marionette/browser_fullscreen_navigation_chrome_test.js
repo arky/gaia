@@ -1,9 +1,9 @@
 'use strict';
 
 var assert = require('assert');
-var Actions = require('marionette-client').Actions;
 var Rocketbar = require('./lib/rocketbar');
 var Server = require('../../../../shared/test/integration/server');
+var FULLSCREENNAVAPP = __dirname + '/../apps/fullscreennavapp';
 
 marionette('Browser - App /w Fullscreen Navigation Chrome', function() {
 
@@ -11,12 +11,8 @@ marionette('Browser - App /w Fullscreen Navigation Chrome', function() {
     prefs: {
       'dom.w3c_touch_events.enabled': 1
     },
-    settings: {
-      'ftu.manifestURL': null,
-      'lockscreen.enabled': false
-    },
     apps: {
-      'fullscreennavapp.gaiamobile.org': __dirname + '/fullscreennavapp',
+      'fullscreennavapp.gaiamobile.org': FULLSCREENNAVAPP,
     }
   });
 
@@ -24,14 +20,12 @@ marionette('Browser - App /w Fullscreen Navigation Chrome', function() {
   var halfScreenHeight;
 
   setup(function(done) {
-    actions = new Actions(client);
+    actions = client.loader.getActions();
     home = client.loader.getAppClass('verticalhome');
     rocketbar = new Rocketbar(client);
     search = client.loader.getAppClass('search');
     system = client.loader.getAppClass('system');
     system.waitForStartup();
-
-    search.removeGeolocationPermission();
 
     halfScreenHeight = client.executeScript(function() {
       return window.innerHeight;
@@ -97,7 +91,7 @@ marionette('Browser - App /w Fullscreen Navigation Chrome', function() {
     client.switchToFrame();
     expandRocketbar();
     var selector = system.Selector.appChromeProgressBar;
-    var progressBar = client.helper.waitForElement(selector);
+    var progressBar = system.appChromeProgressBar;
     var chromeSize = system.appChrome.size();
     client.waitFor(function() {
       var pbPosition = progressBar.scriptWith(function(element) {
@@ -107,18 +101,17 @@ marionette('Browser - App /w Fullscreen Navigation Chrome', function() {
     });
 
     waitForOffscreen(selector);
-    var progressbar = client.findElement(system.Selector.appChromeProgressBar);
     client.waitFor(function() {
-      return !progressbar.displayed();
+      return !progressBar.displayed();
     });
 
     expandRocketbar();
     client.waitFor(function() {
-      return progressbar.displayed();
+      return progressBar.displayed();
     });
     server.uncork(url);
     client.waitFor(function() {
-      return !progressbar.displayed();
+      return !progressBar.displayed();
     });
   });
 });

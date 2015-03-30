@@ -1,6 +1,7 @@
 /* -*- Mode: js2; js2-basic-offset: 2; indent-tabs-mode: nil -*- */
 /* vim: set ft=javascript sw=2 ts=2 autoindent cindent expandtab: */
 
+/* global AppWindowManager, KeyboardManager, focusManager */
 'use strict';
 
 var TrustedUIManager = {
@@ -42,8 +43,9 @@ var TrustedUIManager = {
   },
 
   getDialogFromOrigin: function trui_getDialogFromOrigin(origin) {
-    if (!origin || !this.hasTrustedUI(origin))
+    if (!origin || !this.hasTrustedUI(origin)) {
       return false;
+    }
     var stack = this._dialogStacks[origin];
     return stack[stack.length - 1];
   },
@@ -60,6 +62,7 @@ var TrustedUIManager = {
     window.addEventListener('keyboardchange', this);
     this.header.addEventListener('action', this);
     this.errorClose.addEventListener('click', this);
+    focusManager.addUI(this);
   },
 
   open: function trui_open(name, frame, chromeEventId, onCancelCB) {
@@ -85,8 +88,9 @@ var TrustedUIManager = {
 
     this._restoreOrientation();
 
-    if (callback)
+    if (callback) {
       callback();
+    }
 
     if (stackSize === 0) {
       // Nothing to close.  what are you doing?
@@ -108,14 +112,35 @@ var TrustedUIManager = {
       // event ultimately to be fired.
       this._hide();
 
-      window.focus();
+      // focus back to the top most window/overlay.
+      focusManager.focus();
     } else {
       this._closeDialog(chromeEventId, origin);
     }
   },
 
-  isVisible: function trui_show() {
+  isVisible: function trui_isVisible() {
     return this.screen.classList.contains('trustedui');
+  },
+
+  isFocusable: function trui_isFocusable() {
+    return this.isVisible();
+  },
+
+  getElement: function trui_getElement() {
+    return this.popupContainer;
+  },
+
+  focus: function trui_focus() {
+    var dialog = this._getTopDialog();
+    if (dialog) {
+      document.activeElement.blur();
+      if (dialog.frame.dataset.error) {
+        this.errorClose.focus();
+      } else {
+        dialog.frame.focus();
+      }
+    }
   },
 
   _hideTrustedApp: function trui_hideTrustedApp() {
@@ -234,7 +259,7 @@ var TrustedUIManager = {
 
     // Push and show.
     this.currentStack.push(dialog);
-    this.dialogTitle.textContent = dialog.name;
+    this.dialogTitle.setAttribute('data-l10n-id', dialog.name);
     this.container.appendChild(dialog.frame);
     this._makeDialogVisible(dialog);
   },
@@ -246,12 +271,15 @@ var TrustedUIManager = {
 
     // ensure the frame is visible and the dialog title is correct.
     dialog.frame.classList.add('selected');
-    this.dialogTitle.textContent = dialog.name;
+    this.dialogTitle.setAttribute('data-l10n-id', dialog.name);
+    // move focus to the displayed frame
+    focusManager.focus();
   },
 
   _makeDialogHidden: function trui_makeDialogHidden(dialog) {
-    if (!dialog)
+    if (!dialog) {
       return;
+    }
     this._restoreOrientation();
     dialog.frame.classList.remove('selected');
   },
@@ -316,8 +344,9 @@ var TrustedUIManager = {
       stack = this._dialogStacks[origin];
     }
 
-    if (stack.length === 0)
+    if (stack.length === 0) {
       return;
+    }
 
     // If the user closed a trusty UI dialog, they probably meant
     // to close every dialog.
@@ -350,12 +379,19 @@ var TrustedUIManager = {
     }
 
     var name = dialog.name;
-    var _ = navigator.mozL10n.get;
-
-    this.errorTitle.textContent = _('error-title', {name: name});
-    this.errorMessage.textContent = _(errorProperty, {name: name});
+    navigator.mozL10n.setAttributes(
+      this.errorTitle,
+      'error-title',
+      {name: name}
+    );
+    navigator.mozL10n.setAttributes(
+      this.errorMessage,
+      errorProperty,
+      {name: name}
+    );
 
     this.container.classList.add('error');
+    focusManager.focus();
   },
 
   handleEvent: function trui_handleEvent(evt) {
@@ -389,12 +425,14 @@ var TrustedUIManager = {
       case 'appwillopen':
         var app = evt.detail;
         // Hiding trustedUI when coming from Activity
-        if (this.isVisible())
+        if (this.isVisible()) {
           this._hideTrustedApp();
+        }
 
         // Ignore homescreen
-        if (app.isHomescreen)
+        if (app.isHomescreen) {
           return;
+        }
         this._lastDisplayedApp = app.origin;
         if (this.currentStack.length) {
           // Reopening an app with trustedUI
@@ -410,8 +448,9 @@ var TrustedUIManager = {
         }
         break;
       case 'appwillclose':
-        if (this.isVisible())
+        if (this.isVisible()) {
           return;
+        }
         var dialog = this._getTopDialog();
         this._makeDialogHidden(dialog);
         this._hide();

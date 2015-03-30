@@ -8,8 +8,6 @@ marionette('Software Home Button - IME Menu', function() {
       'dom.w3c_touch_events.enabled': 1
     },
     settings: {
-      'ftu.manifestURL': null,
-      'lockscreen.enabled': false,
       'software-button.enabled': true
     }
   });
@@ -25,6 +23,8 @@ marionette('Software Home Button - IME Menu', function() {
 
   test('Proper layout for alerts', function() {
     client.executeScript(function() {
+      window.wrappedJSObject.KeyboardManager._showingInputGroup = 'text';
+
       window.dispatchEvent(new CustomEvent('mozChromeEvent', {
         detail: {
           type: 'inputmethod-showall'

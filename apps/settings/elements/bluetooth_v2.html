@@ -2,7 +2,7 @@
   <template>
 
     <gaia-header action="back" data-href="#root">
-      <h1 data-l10n-id="bluetooth-header"> Bluetooth </h1>
+      <h1 data-l10n-id="bluetooth-header"></h1>
     </gaia-header>
 
     <div>
@@ -49,37 +49,12 @@
       </ul>
     </div>
 
-    <form role="dialog" data-type="confirm" class="update-device-name" hidden>
-      <section>
-        <h1 data-l10n-id="change-device-name">Change phone name</h1>
-        <p>
-          <input type="text" class="update-device-name-input" value="" dir="auto"/>
-          <span data-l10n-id="change-phone-name-desc">Change the name of your device as it appears in your computer</span>
-        </p>
-      </section>
-      <menu>
-        <button class="update-device-name-cancel" data-l10n-id="cancel">close</button>
-        <button data-l10n-id="ok" class="update-device-name-confirm recommend">done</button>
-      </menu>
-    </form>
-
     <form role="dialog" data-type="action" class="paired-device-option" hidden>
       <menu>
         <button data-l10n-id="device-option-connect" class="connect-option">Connect</button>
         <button data-l10n-id="device-option-disconnect" class="disconnect-option">Disconnect</button>
         <button data-l10n-id="device-option-unpair" class="unpair-option">Unpair</button>
-        <button data-l10n-id="cancel">Cancel</button>
-      </menu>
-    </form>
-
-    <form role="dialog" data-type="confirm" class="unpair-device" hidden>
-      <section>
-        <h1 data-l10n-id="device-option-unpair-confirmation">Confirmation</h1>
-        <p data-l10n-id="device-option-unpair-device">Unpair device?</p>
-      </section>
-      <menu>
-        <button data-l10n-id="cancel" class="unpair-device-cancel">Cancel</button>
-        <button data-l10n-id="device-option-confirm" class="confirm-option danger">Confirm</button>
+        <button data-l10n-id="cancel" class="cancel-option">Cancel</button>
       </menu>
     </form>
 
